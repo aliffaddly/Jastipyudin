@@ -10,7 +10,8 @@ import {
   Plus, 
   Info,
   CheckCircle,
-  Eye
+  Eye,
+  Search
 } from 'lucide-react';
 import { Product } from '@/types';
 
@@ -19,6 +20,7 @@ export const ProductCatalog: React.FC = () => {
     products, 
     selectedCategory, 
     searchQuery, 
+    setSearchQuery,
     calculatePriceBreakdown, 
     formatIDR, 
     formatTHB, 
@@ -42,6 +44,26 @@ export const ProductCatalog: React.FC = () => {
 
   return (
     <div className="mb-12">
+      {/* Search Box */}
+      <div className="relative mb-4 max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          placeholder="Cari Gentle Woman, 4U2, GMMTV, Cha Tra Mue..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-white border border-slate-200 rounded-full pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all placeholder:text-slate-400 shadow-sm"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       {/* Section Header */}
       <div className="flex items-center justify-between mb-4">
         <div>

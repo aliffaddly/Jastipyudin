@@ -16,28 +16,40 @@ import {
 export const TripBanner: React.FC = () => {
   const { trip, setIsCustomModalOpen, setBuyerTab } = useApp();
 
-  // Countdown timer state (hours, minutes, seconds)
+  // Countdown timer derived from trip.orderCloseDate
   const [timeLeft, setTimeLeft] = useState({
-    hours: 14,
-    minutes: 38,
-    seconds: 42,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
   });
+  const [isClosed, setIsClosed] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: 59, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        }
-        return prev;
+    const computeTimeLeft = () => {
+      const target = new Date(trip.orderCloseDate).getTime();
+      if (Number.isNaN(target)) {
+        setIsClosed(false);
+        return;
+      }
+      const diffMs = target - Date.now();
+      if (diffMs <= 0) {
+        setTimeLeft({ hours: 0, minutes: 0, seconds: 0 });
+        setIsClosed(true);
+        return;
+      }
+      setIsClosed(false);
+      const totalSeconds = Math.floor(diffMs / 1000);
+      setTimeLeft({
+        hours: Math.floor(totalSeconds / 3600),
+        minutes: Math.floor((totalSeconds % 3600) / 60),
+        seconds: totalSeconds % 60,
       });
-    }, 1000);
+    };
+
+    computeTimeLeft();
+    const timer = setInterval(computeTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [trip.orderCloseDate]);
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-600 via-amber-700 to-rose-800 text-white shadow-xl shadow-amber-900/10 mb-8 border border-amber-400/30">
@@ -66,14 +78,20 @@ export const TripBanner: React.FC = () => {
           {/* Countdown Clock */}
           <div className="flex items-center space-x-2 bg-black/30 backdrop-blur-md px-3.5 py-1.5 rounded-2xl border border-white/10">
             <Clock className="w-4 h-4 text-amber-300 animate-spin" style={{ animationDuration: '8s' }} />
-            <span className="text-xs text-amber-200/90 font-medium">Tutup Titipan:</span>
-            <div className="flex items-center space-x-1 font-mono font-black text-sm text-white">
-              <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.hours).padStart(2, '0')}j</span>
-              <span>:</span>
-              <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.minutes).padStart(2, '0')}m</span>
-              <span>:</span>
-              <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.seconds).padStart(2, '0')}s</span>
-            </div>
+            {isClosed ? (
+              <span className="text-xs text-rose-200 font-bold">Titipan Ditutup</span>
+            ) : (
+              <>
+                <span className="text-xs text-amber-200/90 font-medium">Tutup Titipan:</span>
+                <div className="flex items-center space-x-1 font-mono font-black text-sm text-white">
+                  <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.hours).padStart(2, '0')}j</span>
+                  <span>:</span>
+                  <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.minutes).padStart(2, '0')}m</span>
+                  <span>:</span>
+                  <span className="bg-white/20 px-1.5 py-0.5 rounded">{String(timeLeft.seconds).padStart(2, '0')}s</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -87,7 +105,7 @@ export const TripBanner: React.FC = () => {
             {trip.title}
           </h1>
           <p className="text-amber-100/90 text-xs sm:text-sm leading-relaxed">
-            Titip langsung barang viral dari Bangkok! Eveandboy Siam, Gentle Woman, Pratunam Market, merchandise serial GMMTV, hingga camilan 7-Eleven Thailand dengan kurs murah dan jastip fee transparan.
+            Titip langsung barang viral dari Bangkok! Gentle Woman, Pratunam Market, hingga camilan 7-Eleven Thailand dengan kurs murah spesial buat kamu.
           </p>
         </div>
 
@@ -152,7 +170,7 @@ export const TripBanner: React.FC = () => {
             </div>
             <div className="flex items-center space-x-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Struk & Nota Fisik Toko</span>
+              <span>Insha Allah Terpercaya</span>
             </div>
           </div>
         </div>

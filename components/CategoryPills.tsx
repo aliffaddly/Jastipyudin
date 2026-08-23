@@ -69,6 +69,13 @@ export const CategoryPills: React.FC = () => {
       icon: <Store className="w-3.5 h-3.5" />,
       count: products.filter((p) => p.category === 'SEVEN_ELEVEN').length,
     },
+    {
+      id: 'CUSTOM',
+      label: 'Titip Khusus',
+      thaiLabel: 'สั่งพิเศษ',
+      icon: <HelpCircle className="w-3.5 h-3.5" />,
+      count: products.filter((p) => p.category === 'CUSTOM').length,
+    },
   ];
 
   return (

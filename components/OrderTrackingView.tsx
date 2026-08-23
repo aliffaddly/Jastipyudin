@@ -14,7 +14,8 @@ import {
   ChevronRight, 
   ExternalLink,
   ShoppingBag,
-  MessageCircle
+  MessageCircle,
+  Camera
 } from 'lucide-react';
 
 export const OrderTrackingView: React.FC = () => {
@@ -29,8 +30,13 @@ export const OrderTrackingView: React.FC = () => {
     resolveOrderItemShortage,
     refunds,
     setBuyerTab,
-    setIsCustomModalOpen
+    setIsCustomModalOpen,
+    confirmOrderReceived,
+    proofSignedUrls
   } = useApp();
+
+  const [deliveryProofFile, setDeliveryProofFile] = React.useState<File | null>(null);
+  const [isConfirmingDelivery, setIsConfirmingDelivery] = React.useState(false);
 
   const customerOrders = currentUser
     ? orders.filter((order) => order.userId === currentUser.id)
@@ -150,17 +156,13 @@ export const OrderTrackingView: React.FC = () => {
             <h3 className="text-lg sm:text-xl font-black mb-1">
               {activeOrder.status === 'AWAITING_PAYMENT'
                 ? '⚠️ Menunggu Pembayaran Dikonfirmasi'
-                : activeOrder.status === 'PURCHASED'
-                ? '🛍️ Barang Sudah Berhasil Dibelikan di Toko Bangkok!'
-                : activeOrder.status === 'IN_SHOPPING_QUEUE'
-                ? '📍 Sedang Dalam Rute Belanja Shopper Bangkok'
-                : activeOrder.status === 'PACKED_BANGKOK'
-                ? '📦 Sedang Dipacking Aman di Hub Bangkok'
-                : activeOrder.status === 'AIR_CARGO_TO_JKT'
-                ? '✈️ Dalam Penerbangan Kargo ke Jakarta'
-                : activeOrder.status === 'ARRIVED_JKT_HUB'
-                ? '🏢 Tiba di Hub Sortir Jakarta'
-                : '🚚 Dalam Pengiriman ke Alamatmu'}
+                : activeOrder.status === 'SHOPPING'
+                ? '🛍️ Barang Sedang Dibelikan di Toko Bangkok'
+                : activeOrder.status === 'PACKED_READY'
+                ? '📦 Sudah Dipacking & Siap Dibawa Pulang'
+                : activeOrder.status === 'ARRIVED_JKT'
+                ? '🏠 Barang Sudah Tiba di Jakarta'
+                : '✅ Pesanan Selesai Diterima'}
             </h3>
 
             <p className="text-xs text-amber-100/90 leading-relaxed max-w-lg mb-4">
@@ -221,11 +223,11 @@ export const OrderTrackingView: React.FC = () => {
                         <div className="mt-3 p-3 bg-amber-50/60 rounded-2xl border border-amber-200 inline-block">
                           <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 mb-1.5">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Foto Bukti Pembelian Toko Bangkok:</span>
+                            <span>{step.status === 'DELIVERED' ? 'Foto Konfirmasi Barang Diterima:' : 'Foto Bukti Packing:'}</span>
                           </div>
                           <img
-                            src={step.photoProofUrl}
-                            alt="Bukti Beli Bangkok"
+                            src={proofSignedUrls[step.photoProofUrl] || step.photoProofUrl}
+                            alt="Bukti foto"
                             className="w-36 h-28 object-cover rounded-xl border border-amber-300 shadow-sm"
                           />
                         </div>
@@ -236,6 +238,49 @@ export const OrderTrackingView: React.FC = () => {
               })}
             </div>
           </div>
+
+          {/* Customer Delivery Confirmation */}
+          {activeOrder.status === 'DELIVERED' ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <p className="text-xs font-bold text-emerald-800">Pesanan sudah kamu konfirmasi selesai dan diterima. Terima kasih sudah jastip di Jastipyduin!</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
+              <h4 className="text-sm font-extrabold text-slate-900">Sudah Menerima Barang?</h4>
+              <p className="text-xs text-slate-500">Upload foto barang yang kamu terima, lalu klik selesaikan pesanan. Tombol ini aktif setelah barang tiba di Jakarta.</p>
+              <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer w-fit">
+                <Camera className="w-4 h-4 text-amber-600" />
+                <span>{deliveryProofFile ? deliveryProofFile.name : 'Upload foto barang diterima'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={activeOrder.status !== 'ARRIVED_JKT'}
+                  onChange={(event) => setDeliveryProofFile(event.target.files?.[0] || null)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={activeOrder.status !== 'ARRIVED_JKT' || !deliveryProofFile || isConfirmingDelivery}
+                onClick={async () => {
+                  if (!deliveryProofFile) return;
+                  setIsConfirmingDelivery(true);
+                  try {
+                    await confirmOrderReceived(activeOrder.id, deliveryProofFile);
+                    setDeliveryProofFile(null);
+                  } catch (error) {
+                    window.alert(error instanceof Error ? error.message : 'Gagal menyelesaikan pesanan.');
+                  } finally {
+                    setIsConfirmingDelivery(false);
+                  }
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+              >
+                {isConfirmingDelivery ? 'Menyimpan...' : 'Selesaikan Pesanan'}
+              </button>
+            </div>
+          )}
 
         </div>
 

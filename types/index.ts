@@ -11,13 +11,9 @@ export type TripStatus = 'PLANNING' | 'LIVE_SHOPPING' | 'PACKING' | 'SHIPPED' | 
 
 export type OrderStatus = 
   | 'AWAITING_PAYMENT'
-  | 'PAID'
-  | 'IN_SHOPPING_QUEUE'
-  | 'PURCHASED'
-  | 'PACKED_BANGKOK'
-  | 'AIR_CARGO_TO_JKT'
-  | 'ARRIVED_JKT_HUB'
-  | 'SHIPPED_DOMESTIC'
+  | 'SHOPPING'
+  | 'PACKED_READY'
+  | 'ARRIVED_JKT'
   | 'DELIVERED';
 
 export type FulfillmentStatus = 'PENDING' | 'PURCHASED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
@@ -159,6 +155,8 @@ export interface Order {
   trackingSteps: OrderTrackingStep[];
   trackingNumber?: string;
   refundAmountIDR?: number;
+  customerConfirmedAt?: string;
+  deliveryProofUrl?: string;
 }
 
 export interface Refund {

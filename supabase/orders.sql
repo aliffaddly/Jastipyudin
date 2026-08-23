@@ -13,11 +13,13 @@ create table if not exists public.orders (
   total_idr numeric not null default 0,
   payment_method text not null check (payment_method in ('QRIS', 'BCA', 'MANDIRI')),
   payment_status text not null default 'UNPAID' check (payment_status in ('UNPAID', 'VERIFYING', 'CONFIRMED', 'REJECTED')),
-  order_status text not null default 'AWAITING_PAYMENT' check (order_status in ('AWAITING_PAYMENT', 'PAID', 'IN_SHOPPING_QUEUE', 'PURCHASED', 'PACKED_BANGKOK', 'AIR_CARGO_TO_JKT', 'ARRIVED_JKT_HUB', 'SHIPPED_DOMESTIC', 'DELIVERED')),
+  order_status text not null default 'AWAITING_PAYMENT' check (order_status in ('AWAITING_PAYMENT', 'SHOPPING', 'PACKED_READY', 'ARRIVED_JKT', 'DELIVERED')),
   payment_proof_url text,
   tracking_number text,
   refund_amount_idr numeric not null default 0,
   tracking_steps jsonb not null default '[]'::jsonb,
+  customer_confirmed_at timestamptz,
+  delivery_proof_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

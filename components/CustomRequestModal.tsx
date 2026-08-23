@@ -41,6 +41,7 @@ export const CustomRequestModal: React.FC = () => {
     isCustomModalOpen, 
     setIsCustomModalOpen, 
     submitCustomRequest, 
+    uploadRequestImage,
     calculatePriceBreakdown, 
     formatIDR, 
     formatTHB,
@@ -57,6 +58,7 @@ export const CustomRequestModal: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [referenceUrl, setReferenceUrl] = useState('');
   const [imageUrl, setImageUrl] = useState(PHOTO_PRESETS[0].url);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [targetPriceTHB, setTargetPriceTHB] = useState<number>(350);
   const [estimatedWeightGrams, setEstimatedWeightGrams] = useState<number>(200);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -279,7 +281,7 @@ export const CustomRequestModal: React.FC = () => {
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
                 <span>Foto Contoh / Referensi Produk</span>
-                <span className="text-[10px] text-slate-400 font-normal">Pilih preset atau masukkan link gambar</span>
+                <span className="text-[10px] text-slate-400 font-normal">Pilih preset atau upload foto sendiri</span>
               </label>
 
               <div className="grid grid-cols-4 gap-2 mb-2">
@@ -302,13 +304,29 @@ export const CustomRequestModal: React.FC = () => {
                 ))}
               </div>
 
-              <input
-                type="text"
-                placeholder="Atau tempel URL gambar langsung..."
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-600 focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 font-mono"
-              />
+              <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer w-fit">
+                <UploadCloud className="w-4 h-4 text-amber-600" />
+                <span>{isUploadingImage ? 'Mengunggah...' : 'Upload foto sendiri'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={isUploadingImage}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    setIsUploadingImage(true);
+                    try {
+                      const url = await uploadRequestImage(file);
+                      setImageUrl(url);
+                    } catch (error) {
+                      window.alert(error instanceof Error ? error.message : 'Gagal mengunggah foto.');
+                    } finally {
+                      setIsUploadingImage(false);
+                    }
+                  }}
+                />
+              </label>
             </div>
 
             {/* Specific Notes: Size, Shade, Flavor */}

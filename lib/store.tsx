@@ -59,6 +59,7 @@ interface AppContextType {
   addProduct: (product: Product) => Promise<void>;
   updateProduct: (id: string, product: Omit<Product, 'id'>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  uploadProductImage: (file: File) => Promise<string>;
   selectedCategory: CategoryType;
   setSelectedCategory: (cat: CategoryType) => void;
   searchQuery: string;
@@ -72,6 +73,8 @@ interface AppContextType {
   customRequests: CustomRequest[];
   submitCustomRequest: (req: Omit<CustomRequest, 'id' | 'createdAt' | 'status'>) => Promise<string>;
   updateCustomRequestStatus: (id: string, status: CustomRequest['status'], adminNotes?: string, quotedPriceTHB?: number) => Promise<void>;
+  ensureCustomRequestsLoaded: () => Promise<void>;
+  uploadRequestImage: (file: File) => Promise<string>;
 
   // Cart
   cart: CartItem[];
@@ -91,13 +94,17 @@ interface AppContextType {
     paymentMethod: 'QRIS' | 'BCA' | 'MANDIRI';
   }) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, photoProofUrl?: string) => Promise<void>;
+  markOrderPacked: (orderId: string, proofFile: File) => Promise<void>;
   updateOrderItemStatus: (orderId: string, itemId: string, status: FulfillmentStatus, fulfillmentNote?: string) => Promise<void>;
   updateOrderItemFulfillment: (orderId: string, itemId: string, purchasedQuantity: number, fulfillmentNote?: string) => Promise<void>;
   resolveOrderItemShortage: (orderId: string, itemId: string, resolution: ShortageResolution) => Promise<void>;
   markOrderPaid: (orderId: string, proofUrl?: string) => Promise<void>;
+  proofSignedUrls: Record<string, string>;
   refunds: Refund[];
+  ensureRefundsLoaded: () => Promise<void>;
   updateRefundStatus: (refundId: string, status: RefundStatus, paymentReference?: string, adminNote?: string) => Promise<void>;
   submitPayment: (orderId: string, amountIDR: number, method: Order['paymentMethod'], proofFile: File) => Promise<void>;
+  confirmOrderReceived: (orderId: string, proofFile: File) => Promise<void>;
   currentActiveOrderId: string | null;
   setCurrentActiveOrderId: (id: string | null) => void;
 
@@ -144,6 +151,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [refunds, setRefunds] = useState<Refund[]>([]);
+  const [refundsLoaded, setRefundsLoaded] = useState<boolean>(false);
+  const [customRequestsLoaded, setCustomRequestsLoaded] = useState<boolean>(false);
+  const [proofSignedUrls, setProofSignedUrls] = useState<Record<string, string>>({});
   const [currentActiveOrderId, setCurrentActiveOrderId] = useState<string | null>(INITIAL_ORDERS[0]?.id || null);
 
   // UI Navigation state
@@ -279,8 +289,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         trackingNumber: row.tracking_number || undefined,
         refundAmountIDR: Number(row.refund_amount_idr || 0),
         trackingSteps: row.tracking_steps || [],
+        customerConfirmedAt: row.customer_confirmed_at || undefined,
+        deliveryProofUrl: row.delivery_proof_url || undefined,
       });
     }
+    // Keep trackingSteps.photoProofUrl as the raw storage path (never a signed URL) so it
+    // stays consistent with what's persisted in the database. Signed URLs are resolved
+    // separately into proofSignedUrls for display only.
+    const signedUrlEntries: Record<string, string> = {};
+    await Promise.all(loadedOrders.flatMap((order) => order.trackingSteps.map(async (step) => {
+      if (!step.photoProofUrl || step.photoProofUrl.startsWith('http')) return;
+      const bucket = step.status === 'DELIVERED' ? 'delivery-proofs' : step.status === 'PACKED_READY' ? 'packing-proofs' : null;
+      if (!bucket) return;
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(step.photoProofUrl, 3600);
+      if (!error && data?.signedUrl) {
+        signedUrlEntries[step.photoProofUrl] = data.signedUrl;
+      }
+    })));
+    setProofSignedUrls((current) => ({ ...current, ...signedUrlEntries }));
     setOrders(loadedOrders);
     setCurrentActiveOrderId(loadedOrders[0]?.id || null);
   };
@@ -312,6 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setCustomRequests([]);
     }
+    setCustomRequestsLoaded(true);
   };
 
   const loadRefunds = async () => {
@@ -331,6 +358,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       processedAt: row.processed_at || undefined,
       createdAt: row.created_at,
     })));
+    setRefundsLoaded(true);
+  };
+
+  // Lazy-load: only fetch custom requests / refunds once, when the admin tab actually needs them.
+  const ensureCustomRequestsLoaded = async () => {
+    if (customRequestsLoaded) return;
+    await loadCustomRequests();
+  };
+
+  const ensureRefundsLoaded = async () => {
+    if (refundsLoaded) return;
+    await loadRefunds();
   };
 
   const mapStoreRow = (row: Record<string, any>): BangkokStore => ({
@@ -467,7 +506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'custom_requests' }, () => {
-          loadCustomRequests().catch((error) => console.error('Failed to refresh custom requests', error));
+          if (customRequestsLoaded) loadCustomRequests().catch((error) => console.error('Failed to refresh custom requests', error));
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
           loadCatalog().catch((error) => console.error('Failed to refresh products', error));
@@ -476,7 +515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loadShoppingTrip().catch((error) => console.error('Failed to refresh shopping trip', error));
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'refunds' }, () => {
-          loadRefunds().catch((error) => console.error('Failed to refresh refunds', error));
+          if (refundsLoaded) loadRefunds().catch((error) => console.error('Failed to refresh refunds', error));
         })
         .subscribe();
       unsubscribe = () => {
@@ -488,8 +527,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
           loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
           loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
-          loadCustomRequests().catch((error) => console.error('Failed to load custom requests', error));
-          loadRefunds().catch((error) => console.error('Failed to load refunds', error));
         }
       });
       const { data } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -498,11 +535,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
           loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
           loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
-          loadCustomRequests().catch((error) => console.error('Failed to load custom requests', error));
-          loadRefunds().catch((error) => console.error('Failed to load refunds', error));
         } else if (isMounted) {
           setCurrentUser(null);
           setActiveView('buyer');
+          setCustomRequestsLoaded(false);
+          setRefundsLoaded(false);
         }
       });
       unsubscribe = () => data.subscription.unsubscribe();
@@ -584,6 +621,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await setExchangeConfig(updated);
   };
 
+  const uploadProductImage = async (file: File): Promise<string> => {
+    const supabase = getSupabaseClient();
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const addProduct = async (prod: Product): Promise<void> => {
     const { error } = await getSupabaseClient().from('products').insert({
       id: prod.id,
@@ -659,6 +709,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error) throw error;
     setTripState(newTrip);
     saveState({ trip: newTrip });
+  };
+
+  const uploadRequestImage = async (file: File): Promise<string> => {
+    if (!currentUser?.id) throw new Error('Silakan login sebelum mengunggah foto.');
+    const supabase = getSupabaseClient();
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${currentUser.id}/${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage.from('request-images').upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from('request-images').getPublicUrl(path);
+    return data.publicUrl;
   };
 
   const submitCustomRequest = async (reqData: Omit<CustomRequest, 'id' | 'createdAt' | 'status'>): Promise<string> => {
@@ -942,46 +1006,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           completed: false,
         },
         {
-          status: 'IN_SHOPPING_QUEUE',
-          title: 'Masuk Antrean Rute Shopper Bangkok',
-          description: 'Daftar titipan masuk rute mall Siam Square & Pratunam.',
+          status: 'SHOPPING',
+          title: 'Barang Sedang Dibeli',
+          description: 'Shopper sedang membelikan barang titipanmu langsung di toko Bangkok.',
           location: 'Bangkok, Thailand',
-          timestamp: 'Baru saja',
-          completed: false,
-          current: false,
-        },
-        {
-          status: 'PURCHASED',
-          title: 'Barang Dibelikan di Toko Bangkok',
-          description: 'Shopper membelikan barang langsung di outlet resmi.',
-          location: 'Bangkok Store Outlets',
           completed: false,
         },
         {
-          status: 'PACKED_BANGKOK',
-          title: 'Packing Ekstra Koper & Bubble Wrap',
-          description: 'Dipacking aman dengan segel pelindung.',
-          location: 'Bangkok Hub Hotel',
+          status: 'PACKED_READY',
+          title: 'Barang Dipacking & Siap Dikirim',
+          description: 'Barang sudah dipacking rapi dan siap dibawa pulang.',
+          location: 'Bangkok, Thailand',
           completed: false,
         },
         {
-          status: 'AIR_CARGO_TO_JKT',
-          title: 'Terbang Bagasi Bangkok ✈️ Jakarta',
-          description: 'Penerbangan kargo bagasi tiba di Bandara Soekarno Hatta.',
-          location: 'Flight BKK - CGK',
+          status: 'ARRIVED_JKT',
+          title: 'Barang Tiba di Jakarta',
+          description: 'Barang sudah tiba di Jakarta dan siap diserahkan.',
+          location: 'Jakarta, Indonesia',
           completed: false,
         },
         {
-          status: 'ARRIVED_JKT_HUB',
-          title: 'Sortir Hub Jakarta & Quality Control',
-          description: 'Unboxing koper dan sortir pengiriman.',
-          location: 'Hub Jastipyudin Jakarta',
-          completed: false,
-        },
-        {
-          status: 'SHIPPED_DOMESTIC',
-          title: 'Dikirim ke Alamat Pembeli',
-          description: 'Pesanan dikirimkan langsung ke alamat tujuan.',
+          status: 'DELIVERED',
+          title: 'Dikirim ke Alamat Kamu',
+          description: 'Konfirmasi barang sudah kamu terima dengan baik.',
           location: `${customerCity}`,
           completed: false,
         },
@@ -1046,13 +1094,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (order.id === orderId) {
         const stepOrder: OrderStatus[] = [
           'AWAITING_PAYMENT',
-          'PAID',
-          'IN_SHOPPING_QUEUE',
-          'PURCHASED',
-          'PACKED_BANGKOK',
-          'AIR_CARGO_TO_JKT',
-          'ARRIVED_JKT_HUB',
-          'SHIPPED_DOMESTIC',
+          'SHOPPING',
+          'PACKED_READY',
+          'ARRIVED_JKT',
           'DELIVERED',
         ];
         const targetIndex = stepOrder.indexOf(status);
@@ -1065,7 +1109,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...step,
             completed: isDone,
             current: isCurr,
-            photoProofUrl: step.status === 'PURCHASED' && photoProofUrl ? photoProofUrl : step.photoProofUrl,
+            photoProofUrl: step.status === 'PACKED_READY' && photoProofUrl ? photoProofUrl : step.photoProofUrl,
             timestamp: isCurr ? new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB' : step.timestamp,
           };
         });
@@ -1089,6 +1133,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setOrders(updated);
     saveState({ orders: updated });
+  };
+
+  const markOrderPacked = async (orderId: string, proofFile: File): Promise<void> => {
+    if (!currentUser?.id) throw new Error('Silakan login sebagai admin.');
+    const supabase = getSupabaseClient();
+    const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const proofPath = `${orderId}/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from('packing-proofs').upload(proofPath, proofFile, {
+      contentType: proofFile.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+    const { data: signedData } = await supabase.storage.from('packing-proofs').createSignedUrl(proofPath, 3600);
+    if (signedData?.signedUrl) {
+      setProofSignedUrls((current) => ({ ...current, [proofPath]: signedData.signedUrl }));
+    }
+    await updateOrderStatus(orderId, 'PACKED_READY', proofPath);
   };
 
   const updateOrderItemStatus = async (
@@ -1226,13 +1287,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markOrderPaid = async (orderId: string, proofUrl?: string): Promise<void> => {
+    const stepOrder: OrderStatus[] = ['AWAITING_PAYMENT', 'SHOPPING', 'PACKED_READY', 'ARRIVED_JKT', 'DELIVERED'];
     const updated = orders.map((order) => {
       if (order.id === orderId) {
+        const newStatus: OrderStatus = order.status === 'AWAITING_PAYMENT' ? 'SHOPPING' : order.status;
+        const targetIndex = stepOrder.indexOf(newStatus);
         return {
           ...order,
           paymentStatus: 'CONFIRMED' as const,
           paymentProofUrl: proofUrl || order.paymentProofUrl,
-          status: order.status === 'AWAITING_PAYMENT' ? 'IN_SHOPPING_QUEUE' : order.status,
+          status: newStatus,
+          trackingSteps: order.trackingSteps.map((step) => {
+            const thisIndex = stepOrder.indexOf(step.status);
+            return {
+              ...step,
+              completed: thisIndex <= targetIndex,
+              current: thisIndex === targetIndex,
+              timestamp: thisIndex === targetIndex ? new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB' : step.timestamp,
+            };
+          }),
         };
       }
       return order;
@@ -1245,6 +1318,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         p_proof_url: proofUrl || null,
       });
       if (error) throw error;
+      const { error: statusError } = await supabase.from('orders').update({
+        order_status: changedOrder.status,
+        tracking_steps: changedOrder.trackingSteps,
+      }).eq('id', orderId);
+      if (statusError) throw statusError;
     }
     setOrders(updated);
     saveState({ orders: updated });
@@ -1269,6 +1347,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error) throw error;
     setOrders((current) => {
       const updated = current.map((item) => item.id === orderId ? { ...item, paymentStatus: 'VERIFYING' as const } : item);
+      saveState({ orders: updated });
+      return updated;
+    });
+  };
+
+  const confirmOrderReceived = async (orderId: string, proofFile: File): Promise<void> => {
+    if (!currentUser?.id) throw new Error('Silakan login sebelum menyelesaikan pesanan.');
+    const order = orders.find((entry) => entry.id === orderId);
+    if (!order) throw new Error('Pesanan tidak ditemukan.');
+    if (order.status !== 'ARRIVED_JKT') throw new Error('Pesanan belum tiba di Jakarta, belum bisa diselesaikan.');
+
+    const supabase = getSupabaseClient();
+    const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const proofPath = `${currentUser.id}/${orderId}-${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from('delivery-proofs').upload(proofPath, proofFile, {
+      contentType: proofFile.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+    const { data: signedData } = await supabase.storage.from('delivery-proofs').createSignedUrl(proofPath, 3600);
+    if (signedData?.signedUrl) {
+      setProofSignedUrls((current) => ({ ...current, [proofPath]: signedData.signedUrl }));
+    }
+
+    const confirmedAt = new Date().toISOString();
+    const stepOrder: OrderStatus[] = ['AWAITING_PAYMENT', 'SHOPPING', 'PACKED_READY', 'ARRIVED_JKT', 'DELIVERED'];
+    const targetIndex = stepOrder.indexOf('DELIVERED');
+    const newTrackingSteps = order.trackingSteps.map((step) => {
+      const thisIndex = stepOrder.indexOf(step.status);
+      return {
+        ...step,
+        completed: thisIndex <= targetIndex,
+        current: thisIndex === targetIndex,
+        photoProofUrl: step.status === 'DELIVERED' ? proofPath : step.photoProofUrl,
+        timestamp: thisIndex === targetIndex ? new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB' : step.timestamp,
+      };
+    });
+
+    const { error } = await supabase.rpc('confirm_order_delivery', {
+      p_order_id: orderId,
+      p_proof_url: proofPath,
+      p_tracking_steps: newTrackingSteps,
+    });
+    if (error) throw error;
+
+    setOrders((current) => {
+      const updated = current.map((entry) => entry.id === orderId ? {
+        ...entry,
+        status: 'DELIVERED' as const,
+        customerConfirmedAt: confirmedAt,
+        deliveryProofUrl: proofPath,
+        trackingSteps: newTrackingSteps,
+      } : entry);
       saveState({ orders: updated });
       return updated;
     });
@@ -1306,6 +1437,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProduct,
         updateProduct,
         deleteProduct,
+        uploadProductImage,
         selectedCategory,
         setSelectedCategory,
         searchQuery,
@@ -1315,6 +1447,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customRequests,
         submitCustomRequest,
         updateCustomRequestStatus,
+        ensureCustomRequestsLoaded,
+        uploadRequestImage,
         cart,
         addToCart,
         removeFromCart,
@@ -1324,13 +1458,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orders,
         createOrder,
         updateOrderStatus,
+        markOrderPacked,
         updateOrderItemStatus,
         updateOrderItemFulfillment,
         resolveOrderItemShortage,
         markOrderPaid,
         refunds,
+        proofSignedUrls,
+        ensureRefundsLoaded,
         updateRefundStatus,
         submitPayment,
+        confirmOrderReceived,
         currentActiveOrderId,
         setCurrentActiveOrderId,
         activeView,

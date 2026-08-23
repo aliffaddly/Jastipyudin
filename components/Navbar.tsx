@@ -5,7 +5,6 @@ import { useApp } from '@/lib/store';
 import { 
   ShoppingBag, 
   Sparkles, 
-  Search, 
   ShieldCheck, 
   UserCheck, 
   Truck,
@@ -27,8 +26,6 @@ export const Navbar: React.FC = () => {
     setIsCustomModalOpen,
     activeView, 
     setActiveView,
-    searchQuery,
-    setSearchQuery,
     buyerTab,
     setBuyerTab,
     trip
@@ -138,30 +135,6 @@ export const Navbar: React.FC = () => {
                 Lacak Titipan
               </button>
             </nav>
-          )}
-
-          {/* Search Bar */}
-          {activeView === 'buyer' && (
-            <div className="flex-1 max-w-xs sm:max-w-sm hidden sm:block">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Cari Gentle Woman, 4U2, GMMTV, Cha Tra Mue..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white/90 border border-slate-200 rounded-full pl-9 pr-4 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all placeholder:text-slate-400 shadow-sm"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            </div>
           )}
 
           {/* Actions: Custom CTA, Cart, User Session & Mode Switcher */}

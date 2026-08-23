@@ -19,7 +19,9 @@ import {
   Lock,
   ShoppingBag,
   ClipboardList,
-  ChevronDown
+  ChevronDown,
+  Truck,
+  Camera
 } from 'lucide-react';
 import { Product, TripStatus, OrderStatus, CategoryType, FulfillmentStatus, RefundStatus } from '@/types';
 
@@ -95,25 +97,39 @@ export const AdminDashboard: React.FC = () => {
     updateTrip, 
     orders, 
     updateOrderStatus, 
+    markOrderPacked,
     updateOrderItemStatus,
     updateOrderItemFulfillment,
     markOrderPaid,
     refunds,
+    ensureRefundsLoaded,
     updateRefundStatus,
     customRequests, 
+    ensureCustomRequestsLoaded,
     updateCustomRequestStatus, 
     products,
     addProduct,
     updateProduct,
     deleteProduct,
+    uploadProductImage,
     stores,
     formatIDR, 
     formatTHB,
     calculatePriceBreakdown
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'routes' | 'currency' | 'trip' | 'requests' | 'manage' | 'list' | 'payments' | 'refunds' | 'sales'>('routes');
+  const [activeTab, setActiveTab] = useState<'routes' | 'currency' | 'trip' | 'requests' | 'manage' | 'list' | 'payments' | 'refunds' | 'sales' | 'shipping'>('routes');
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Lazy-load admin-only data only when the relevant tab is opened for the first time.
+  React.useEffect(() => {
+    if (activeTab === 'requests' || activeTab === 'manage') {
+      ensureCustomRequestsLoaded();
+    }
+    if (activeTab === 'refunds' || activeTab === 'sales') {
+      ensureRefundsLoaded();
+    }
+  }, [activeTab]);
 
   // Currency controller state
   const [rateInput, setRateInput] = useState<number>(exchangeConfig.thbToIdrRate);
@@ -126,8 +142,14 @@ export const AdminDashboard: React.FC = () => {
   const [tripStatus, setTripStatus] = useState<TripStatus>(trip.status);
   const [tripLocation, setTripLocation] = useState(trip.currentShopperLocation);
   const [tripQuota, setTripQuota] = useState(trip.quotaPercent);
-  const [tripCloseDate, setTripCloseDate] = useState(trip.orderCloseDate);
+  const [tripCloseDate, setTripCloseDate] = useState(() => {
+    const parsed = new Date(trip.orderCloseDate);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  });
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   const [productForm, setProductForm] = useState<Omit<Product, 'id'>>({
     name: '',
     brand: '',
@@ -146,6 +168,7 @@ export const AdminDashboard: React.FC = () => {
   const [requestEdits, setRequestEdits] = useState<Record<string, { priceTHB: number; weightGrams: number; adminNotes: string }>>({});
   const [fulfillmentNotes, setFulfillmentNotes] = useState<Record<string, string>>({});
   const [purchasedQuantities, setPurchasedQuantities] = useState<Record<string, number>>({});
+  const [packingProofFiles, setPackingProofFiles] = useState<Record<string, File | null>>({});
   const [openCustomers, setOpenCustomers] = useState<Record<string, boolean>>({});
 
   const showToast = (msg: string) => {
@@ -176,7 +199,7 @@ export const AdminDashboard: React.FC = () => {
         status: tripStatus,
         currentShopperLocation: tripLocation,
         quotaPercent: Number(tripQuota),
-        orderCloseDate: tripCloseDate,
+        orderCloseDate: tripCloseDate ? new Date(tripCloseDate).toISOString() : trip.orderCloseDate,
       });
       showToast('Event trip Bangkok berhasil disimpan!');
     } catch (error) {
@@ -397,6 +420,18 @@ export const AdminDashboard: React.FC = () => {
         >
           <DollarSign className="w-4 h-4" />
           <span>Pembayaran ({orders.filter((order) => order.paymentStatus === 'VERIFYING').length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('shipping')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'shipping'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          <span>Pengiriman ({orders.filter((order) => order.paymentStatus === 'CONFIRMED' && order.status !== 'DELIVERED').length})</span>
         </button>
 
         <button
@@ -675,7 +710,7 @@ export const AdminDashboard: React.FC = () => {
                 {/* Items in this Bangkok Store */}
                 <div className="p-4 space-y-3 flex-1">
                   {itemsList.map(({ orderId, orderNumber, customerName, item, orderStatus }, idx) => {
-                    const isPurchased = orderStatus === 'PURCHASED' || orderStatus === 'PACKED_BANGKOK' || orderStatus === 'AIR_CARGO_TO_JKT' || orderStatus === 'ARRIVED_JKT_HUB' || orderStatus === 'SHIPPED_DOMESTIC';
+                    const isPurchased = orderStatus === 'PACKED_READY' || orderStatus === 'ARRIVED_JKT' || orderStatus === 'DELIVERED';
 
                     return (
                       <div
@@ -906,6 +941,94 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'shipping' && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-base">Status Pengiriman</h3>
+            <p className="text-xs text-slate-500 mt-1">Perbarui status titipan yang dibawa pulang lewat bagasi pribadi. Konfirmasi terima barang dilakukan oleh customer.</p>
+          </div>
+          {orders.filter((order) => order.paymentStatus === 'CONFIRMED' && order.status !== 'DELIVERED').length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 shadow-sm text-sm text-slate-500">Tidak ada pesanan yang perlu diproses pengirimannya.</div>
+          ) : (
+            orders.filter((order) => order.paymentStatus === 'CONFIRMED' && order.status !== 'DELIVERED').map((order) => {
+              const statusLabel = order.status === 'SHOPPING'
+                ? 'Barang Sedang Dibeli'
+                : order.status === 'PACKED_READY'
+                  ? 'Dipacking & Siap Dikirim'
+                  : order.status === 'ARRIVED_JKT'
+                    ? 'Tiba di Jakarta'
+                    : 'Menunggu Pembayaran';
+              const proofFile = packingProofFiles[order.id] || null;
+
+              return (
+                <div key={order.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black text-amber-700">{order.orderNumber}</p>
+                      <h4 className="font-black text-slate-900">{order.customerName}</h4>
+                      <p className="text-xs text-slate-500">{order.items.length} item • Status: <span className="font-bold text-slate-700">{statusLabel}</span></p>
+                    </div>
+                  </div>
+
+                  {order.status === 'SHOPPING' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer">
+                        <Camera className="w-4 h-4 text-amber-600" />
+                        <span>{proofFile ? proofFile.name : 'Upload foto packing'}</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(event) => setPackingProofFiles((current) => ({ ...current, [order.id]: event.target.files?.[0] || null }))}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={!proofFile}
+                        onClick={async () => {
+                          if (!proofFile) return;
+                          try {
+                            await markOrderPacked(order.id, proofFile);
+                            setPackingProofFiles((current) => ({ ...current, [order.id]: null }));
+                            showToast(`${order.orderNumber} ditandai sudah dipacking.`);
+                          } catch (error) {
+                            showToast(error instanceof Error ? error.message : 'Gagal memperbarui status packing.');
+                          }
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+                      >
+                        Tandai Sudah Dipacking
+                      </button>
+                    </div>
+                  )}
+
+                  {order.status === 'PACKED_READY' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await updateOrderStatus(order.id, 'ARRIVED_JKT');
+                          showToast(`${order.orderNumber} ditandai sudah tiba di Jakarta.`);
+                        } catch (error) {
+                          showToast(error instanceof Error ? error.message : 'Gagal memperbarui status.');
+                        }
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+                    >
+                      Tandai Tiba di Jakarta
+                    </button>
+                  )}
+
+                  {order.status === 'ARRIVED_JKT' && (
+                    <p className="text-xs text-emerald-700 font-bold">Menunggu customer konfirmasi barang diterima.</p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {activeTab === 'refunds' && (
         <div className="space-y-5">
           <div>
@@ -1131,7 +1254,7 @@ export const AdminDashboard: React.FC = () => {
                   Waktu Penutupan Order Titipan
                 </label>
                 <input
-                  type="text"
+                  type="datetime-local"
                   value={tripCloseDate}
                   onChange={(e) => setTripCloseDate(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500/30"
@@ -1319,7 +1442,34 @@ export const AdminDashboard: React.FC = () => {
               </select>
               <input required type="number" min="1" placeholder="Harga THB *" value={productForm.priceTHB || ''} onChange={(e) => setProductForm({ ...productForm, priceTHB: Number(e.target.value) })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
               <input required type="number" min="1" placeholder="Berat gram *" value={productForm.weightGrams || ''} onChange={(e) => setProductForm({ ...productForm, weightGrams: Number(e.target.value) })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-              <input placeholder="URL gambar" value={productForm.image} onChange={(e) => setProductForm({ ...productForm, image: e.target.value })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:col-span-2" />
+              <div className="sm:col-span-2 flex items-center gap-3">
+                {productForm.image && (
+                  <img src={productForm.image} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                )}
+                <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer">
+                  <Camera className="w-4 h-4 text-amber-600" />
+                  <span>{isUploadingProductImage ? 'Mengunggah...' : 'Upload foto produk'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={isUploadingProductImage}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      setIsUploadingProductImage(true);
+                      try {
+                        const url = await uploadProductImage(file);
+                        setProductForm({ ...productForm, image: url });
+                      } catch (error) {
+                        showToast(error instanceof Error ? error.message : 'Gagal mengunggah foto produk.');
+                      } finally {
+                        setIsUploadingProductImage(false);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
               <input placeholder="Varian, pisahkan dengan koma" value={productForm.variants?.join(', ') || ''} onChange={(e) => setProductForm({ ...productForm, variants: e.target.value.split(',').map((variant) => variant.trim()).filter(Boolean) })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:col-span-2" />
               <textarea placeholder="Deskripsi produk" value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:col-span-2 min-h-20" />
             </div>
