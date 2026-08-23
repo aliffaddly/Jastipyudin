@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment variables (contains Supabase secrets)
+.env
+.env.local
+.env*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
