@@ -303,13 +303,19 @@ export const CustomRequestModal: React.FC = () => {
                   </button>
                 ))}
               </div>
-
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="Preview"
+                  className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                />
+              )}
               <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer w-fit">
                 <UploadCloud className="w-4 h-4 text-amber-600" />
                 <span>{isUploadingImage ? 'Mengunggah...' : 'Upload foto sendiri'}</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
                   className="hidden"
                   disabled={isUploadingImage}
                   onChange={async (event) => {
@@ -412,7 +418,7 @@ export const CustomRequestModal: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
               <p className="text-[10px] text-center text-slate-400 mt-2">
-                🔒 Pembayaran DP baru ditagihkan setelah Shopper mengonfirmasi ketersediaan barang di Bangkok.
+                🔒 Pembayaran baru ditagihkan setelah Shopper mengonfirmasi ketersediaan barang di Bangkok.
               </p>
             </div>
 

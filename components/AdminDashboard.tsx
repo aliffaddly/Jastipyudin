@@ -375,15 +375,13 @@ export const AdminDashboard: React.FC = () => {
       {/* Tab Navigation (No Live Drops) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none">
         <button
-          onClick={() => setActiveTab('routes')}
+          onClick={() => setActiveTab('sales')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'routes'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <Compass className="w-4 h-4" />
-          <span>Antrean Belanja Berdasarkan Rute ({Object.keys(fulfillmentByLocation).length} Lokasi)</span>
+          <DollarSign className="w-4 h-4" />
+          <span>Sales Dashboard</span>
         </button>
 
         <button
@@ -396,6 +394,18 @@ export const AdminDashboard: React.FC = () => {
         >
           <DollarSign className="w-4 h-4" />
           <span>Pengatur Kurs & Markup</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('routes')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'routes'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Compass className="w-4 h-4" />
+          <span>Antrean Belanja Berdasarkan Rute ({Object.keys(fulfillmentByLocation).length} Lokasi)</span>
         </button>
 
         <button
@@ -432,16 +442,6 @@ export const AdminDashboard: React.FC = () => {
         >
           <Truck className="w-4 h-4" />
           <span>Pengiriman ({orders.filter((order) => order.paymentStatus === 'CONFIRMED' && order.status !== 'DELIVERED').length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Sales Dashboard</span>
         </button>
 
         <button
@@ -1416,7 +1416,7 @@ export const AdminDashboard: React.FC = () => {
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-slate-900">Kelola Jastipan & Titipan</h3>
+              <h3 className="text-lg font-black text-slate-900">Kelola Jastipan</h3>
               <p className="text-xs text-slate-500">
                 Kelola item yang tampil di katalog utama. Item request khusus juga dapat dipublish dari menu Request Masuk.
               </p>

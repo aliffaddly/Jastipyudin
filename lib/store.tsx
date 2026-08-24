@@ -482,7 +482,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    let unsubscribe = () => {};
     try {
       loadCatalog().catch((error) => console.error('Failed to load catalog', error));
       loadExchangeConfig().catch((error) => console.error('Failed to load exchange config', error));
@@ -518,23 +517,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (refundsLoaded) loadRefunds().catch((error) => console.error('Failed to refresh refunds', error));
         })
         .subscribe();
-      unsubscribe = () => {
-        realtimeChannel.unsubscribe();
-      };
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
-          setOrders([]);
-          loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
-          loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
-          loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          setTimeout(() => {
+            setOrders([]);
+            loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
+            loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
+            loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          }, 0);
         }
       });
       const { data } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session) {
-          setOrders([]);
-          loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
-          loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
-          loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          setTimeout(() => {
+            setOrders([]);
+            loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
+            loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
+            loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          }, 0);
         } else if (isMounted) {
           setCurrentUser(null);
           setActiveView('buyer');
@@ -542,15 +542,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setRefundsLoaded(false);
         }
       });
-      unsubscribe = () => data.subscription.unsubscribe();
+      const authSubscription = data.subscription;
+
+      const cleanup = () => {
+        authSubscription.unsubscribe();
+        supabase.removeChannel(realtimeChannel);
+      };
+
+      return () => {
+        isMounted = false;
+        cleanup();
+      };
     } catch (error) {
       console.error(error);
     }
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
   }, []);
 
   // Business data is stored in Supabase only. Legacy localStorage is backup-only and no longer used as the source of truth.

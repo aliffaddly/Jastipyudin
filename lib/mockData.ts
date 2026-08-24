@@ -111,6 +111,16 @@ export const BANGKOK_STORES: BangkokStore[] = [
     badgeColor: 'bg-green-600',
     image: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80',
   },
+  {
+    id: 'others',
+    name: 'Others (Input nama)',
+    thaiName: '',
+    area: 'All Bangkok Outlets',
+    description: '',
+    category: 'Others',
+    badgeColor: 'bg-green-600',
+    image: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80',
+  },
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [
