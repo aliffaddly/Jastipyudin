@@ -381,8 +381,8 @@ export const CustomRequestModal: React.FC = () => {
                   <div className="relative">
                     <input
                       type="number"
-                      min="50"
-                      step="50"
+                      min="0"
+                      step="0.1"
                       value={estimatedWeightGrams}
                       onChange={(e) => setEstimatedWeightGrams(Number(e.target.value))}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/40"
