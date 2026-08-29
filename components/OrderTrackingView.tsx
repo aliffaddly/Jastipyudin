@@ -26,7 +26,7 @@ export const OrderTrackingView: React.FC = () => {
     setCurrentActiveOrderId, 
     formatIDR, 
     formatTHB,
-    calculatePriceBreakdown,
+    calculateLinePrice,
     resolveOrderItemShortage,
     refunds,
     setBuyerTab,
@@ -56,7 +56,11 @@ export const OrderTrackingView: React.FC = () => {
     return Math.max(0, orderedQuantity - purchasedQuantity);
   };
   const refundTotal = refundItems.reduce((total, item) => {
-    return total + calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * getMissingQuantity(item);
+    return total + calculateLinePrice({
+      priceTHB: item.priceTHB,
+      weightGrams: item.weightGrams,
+      quantity: getMissingQuantity(item),
+    }).totalIdr;
   }, 0);
 
   const confirmShortageResolution = (itemName: string, resolution: 'REFUND' | 'CANCEL') => {
@@ -310,7 +314,7 @@ export const OrderTrackingView: React.FC = () => {
                     )}
                     <div className="flex justify-between items-center mt-1 text-[11px]">
                       <span className="text-slate-500 font-semibold">{item.purchasedQuantity ?? item.quantity} dari {item.orderedQuantity ?? item.quantity}x @ {formatTHB(item.priceTHB)}</span>
-                      <span className="font-extrabold text-slate-800">{formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * (item.purchasedQuantity ?? item.quantity))}</span>
+                      <span className="font-extrabold text-slate-800">{formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: item.purchasedQuantity ?? item.quantity }).totalIdr)}</span>
                     </div>
                     <p className={`text-[10px] font-bold mt-1 ${item.fulfillmentStatus === 'PURCHASED' ? 'text-emerald-700' : item.fulfillmentStatus === 'PARTIAL' ? 'text-orange-700' : 'text-amber-700'}`}>
                       Status: {item.fulfillmentStatus === 'PURCHASED' ? 'Sudah dibeli' : item.fulfillmentStatus === 'PARTIAL' ? 'Stok sebagian' : 'Pending'}
@@ -328,7 +332,7 @@ export const OrderTrackingView: React.FC = () => {
                         </div>
                         {item.shortageResolution && item.shortageResolution !== 'PENDING' && (
                           <p className="text-[10px] text-emerald-700 font-bold mt-2">
-                            Pilihan: {item.shortageResolution === 'REFUND' ? `Refund ${formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * Math.max(0, (item.orderedQuantity ?? item.quantity) - (item.purchasedQuantity ?? 0)))}` : 'Bagian yang kurang dibatalkan; selisih dikembalikan'}
+                            Pilihan: {item.shortageResolution === 'REFUND' ? `Refund ${formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: Math.max(0, (item.orderedQuantity ?? item.quantity) - (item.purchasedQuantity ?? 0)) }).totalIdr)}` : 'Bagian yang kurang dibatalkan; selisih dikembalikan'}
                           </p>
                         )}
                       </div>
@@ -361,7 +365,7 @@ export const OrderTrackingView: React.FC = () => {
                           return refund ? <p className="text-[10px] text-emerald-700 font-bold mt-1">Status refund: {refund.status}</p> : null;
                         })()}
                       </div>
-                      <span className="text-xs font-black text-rose-700 shrink-0">{formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * getMissingQuantity(item))}</span>
+                      <span className="text-xs font-black text-rose-700 shrink-0">{formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: getMissingQuantity(item) }).totalIdr)}</span>
                     </div>
                   ))}
                 </div>
@@ -389,7 +393,7 @@ export const OrderTrackingView: React.FC = () => {
                 <span className="font-semibold text-slate-800">{formatIDR(activeOrder.jastipFeeIDR)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>Kargo Udara BKK ✈️ JKT:</span>
+                <span>Penyesuaian Kapasitas Bagasi:</span>
                 <span className="font-semibold text-slate-800">{formatIDR(activeOrder.weightFeeIDR)}</span>
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-sm text-slate-900">

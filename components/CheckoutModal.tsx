@@ -26,6 +26,7 @@ export const CheckoutModal: React.FC = () => {
     setIsCheckoutOpen, 
     cart, 
     calculatePriceBreakdown, 
+    calculateLinePrice,
     formatIDR, 
     formatTHB,
     createOrder,
@@ -45,6 +46,7 @@ export const CheckoutModal: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [createdOrderNumber, setCreatedOrderNumber] = useState('');
+  const [completedTotal, setCompletedTotal] = useState<number | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export const CheckoutModal: React.FC = () => {
     setIsProcessing(false);
     setIsCompleted(false);
     setCreatedOrderNumber('');
+    setCompletedTotal(null);
     setPaymentTimerSeconds(899);
   }, [isCheckoutOpen, currentUser?.id, currentUser?.name, currentUser?.phone, currentUser?.address, currentUser?.city]);
 
@@ -81,11 +84,11 @@ export const CheckoutModal: React.FC = () => {
   let totalWeightGrams = 0;
 
   cart.forEach((item) => {
-    const bd = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+    const bd = calculateLinePrice(item);
     totalRawTHB += item.priceTHB * item.quantity;
-    totalRawIDR += bd.baseWithMarkupIdr * item.quantity;
-    totalJastipIDR += bd.jastipFeeIdr * item.quantity;
-    totalWeightFeeIDR += bd.weightFeeIdr * item.quantity;
+    totalRawIDR += bd.totalRawIdr + bd.totalMarkupIdr;
+    totalJastipIDR += bd.totalHandlingIdr;
+    totalWeightFeeIDR += bd.baggageFeeIdr;
     totalWeightGrams += item.weightGrams * item.quantity;
   });
 
@@ -116,9 +119,10 @@ export const CheckoutModal: React.FC = () => {
         customerCity,
         paymentMethod,
         });
-        await submitPayment(order.id, grandTotal, paymentMethod, proofFile);
+        await submitPayment(order.id, order.totalIDR, paymentMethod, proofFile);
 
         setCreatedOrderNumber(order.orderNumber);
+        setCompletedTotal(order.totalIDR);
         setIsProcessing(false);
         setIsCompleted(true);
 
@@ -195,7 +199,7 @@ export const CheckoutModal: React.FC = () => {
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-sm text-slate-900">
                 <span>Total Tagihan:</span>
-                <span className="text-rose-600 font-extrabold">{formatIDR(grandTotal)}</span>
+                <span className="text-rose-600 font-extrabold">{formatIDR(completedTotal ?? grandTotal)}</span>
               </div>
             </div>
 
@@ -313,7 +317,7 @@ export const CheckoutModal: React.FC = () => {
                       </span>
                     </div>
                     <span className="font-bold text-slate-800 shrink-0">
-                      {formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * item.quantity)}
+                      {formatIDR(calculateLinePrice(item).totalIdr)}
                     </span>
                   </div>
                 ))}
@@ -330,7 +334,7 @@ export const CheckoutModal: React.FC = () => {
                   <span className="font-semibold text-slate-800">{formatIDR(totalJastipIDR)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>3. Total Estimasi Kargo Udara BKK ✈️ JKT (±{totalWeightGrams}g):</span>
+                  <span>3. Penyesuaian Kapasitas Bagasi (±{totalWeightGrams}g):</span>
                   <span className="font-semibold text-slate-800">{formatIDR(totalWeightFeeIDR)}</span>
                 </div>
                 

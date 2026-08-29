@@ -18,12 +18,20 @@ export const CustomRequestsView: React.FC = () => {
   const { 
     customRequests, 
     currentUser,
+    ensureCustomRequestsLoaded,
     setIsCustomModalOpen, 
     calculatePriceBreakdown, 
     formatIDR, 
     formatTHB,
     addToCart 
   } = useApp();
+
+  React.useEffect(() => {
+    if (!currentUser?.id) return;
+    ensureCustomRequestsLoaded().catch((error) => {
+      console.error('Failed to load customer requests', error);
+    });
+  }, [currentUser?.id]);
 
   const customerRequests = currentUser
     ? customRequests.filter((request) => request.userId === currentUser.id)

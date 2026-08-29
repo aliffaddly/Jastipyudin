@@ -14,6 +14,7 @@ import {
   Sparkles,
   Info,
   HelpCircle
+  , ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -21,6 +22,7 @@ export const ProductDetailModal: React.FC = () => {
     selectedProduct, 
     setSelectedProduct, 
     calculatePriceBreakdown, 
+    calculateLinePrice,
     formatIDR, 
     formatTHB, 
     addToCart,
@@ -33,6 +35,7 @@ export const ProductDetailModal: React.FC = () => {
   );
   const [notes, setNotes] = useState('');
   const [showBreakdownInfo, setShowBreakdownInfo] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   React.useEffect(() => {
     if (!selectedProduct) return;
@@ -41,12 +44,20 @@ export const ProductDetailModal: React.FC = () => {
     setSelectedVariant(selectedProduct.variants ? selectedProduct.variants[0] : '');
     setNotes('');
     setShowBreakdownInfo(false);
+    setSelectedImageIndex(0);
   }, [selectedProduct?.id]);
 
   if (!selectedProduct) return null;
 
+  const productImages = selectedProduct.images?.length ? selectedProduct.images : [selectedProduct.image];
+
   const breakdown = calculatePriceBreakdown(selectedProduct.priceTHB, selectedProduct.weightGrams);
-  const totalItemLanded = breakdown.landedSingleItemIdr * quantity;
+  const lineBreakdown = calculateLinePrice({
+    priceTHB: selectedProduct.priceTHB,
+    weightGrams: selectedProduct.weightGrams,
+    quantity,
+  });
+  const totalItemLanded = lineBreakdown.totalIdr;
 
   const handleAddToCart = () => {
     addToCart({
@@ -80,10 +91,30 @@ export const ProductDetailModal: React.FC = () => {
         {/* Product Media */}
         <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full bg-slate-100">
           <img
-            src={selectedProduct.image}
+            src={productImages[selectedImageIndex] || selectedProduct.image}
             alt={selectedProduct.name}
             className="w-full h-full object-cover"
           />
+          {productImages.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setSelectedImageIndex((index) => (index - 1 + productImages.length) % productImages.length)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/55 text-white flex items-center justify-center"
+                aria-label="Foto sebelumnya"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedImageIndex((index) => (index + 1) % productImages.length)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/55 text-white flex items-center justify-center"
+                aria-label="Foto berikutnya"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
           <div className="absolute bottom-3 left-3 bg-black/75 backdrop-blur-md text-amber-300 text-xs font-bold px-3 py-1 rounded-xl border border-white/10 flex items-center gap-1.5 shadow">
             <MapPin className="w-3.5 h-3.5 text-rose-400" />
             <span>{selectedProduct.storeName}</span>
@@ -93,6 +124,22 @@ export const ProductDetailModal: React.FC = () => {
             Estimasi: {selectedProduct.weightGrams} gram
           </div>
         </div>
+
+        {productImages.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto px-5 pt-3 sm:px-6">
+            {productImages.map((image, index) => (
+              <button
+                key={`${image}-${index}`}
+                type="button"
+                onClick={() => setSelectedImageIndex(index)}
+                className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 ${selectedImageIndex === index ? 'border-amber-600' : 'border-slate-200'}`}
+                aria-label={`Pilih foto ${index + 1}`}
+              >
+                <img src={image} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 max-h-[60vh] overflow-y-auto">
@@ -164,14 +211,14 @@ export const ProductDetailModal: React.FC = () => {
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                 Rincian Perhitungan Biaya Transparan
               </span>
-              <button
+              {/* <button
                 type="button"
                 onClick={() => setShowBreakdownInfo(!showBreakdownInfo)}
                 className="text-[11px] text-amber-700 hover:underline flex items-center gap-1"
               >
                 <HelpCircle className="w-3 h-3" />
                 {showBreakdownInfo ? 'Sembunyikan' : 'Detail Formula'}
-              </button>
+              </button> */}
             </div>
 
             <div className="space-y-1.5 text-slate-600">
@@ -184,19 +231,19 @@ export const ProductDetailModal: React.FC = () => {
               <div className="flex justify-between">
                 <span>Jasa Titip & Handling Fee:</span>
                 <span className="font-semibold text-slate-800">
-                  {formatIDR(breakdown.jastipFeeIdr + breakdown.markupIdr)}
+                  {formatIDR(lineBreakdown.totalHandlingIdr + lineBreakdown.totalMarkupIdr)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Estimasi Kargo Udara ({selectedProduct.weightGrams}g):</span>
+                <span>Penyesuaian Kapasitas Bagasi ({lineBreakdown.totalWeightGrams}g):</span>
                 <span className="font-semibold text-slate-800">
-                  {formatIDR(breakdown.weightFeeIdr)}
+                  {formatIDR(lineBreakdown.baggageFeeIdr)}
                 </span>
               </div>
 
               {showBreakdownInfo && (
                 <div className="pt-2 mt-2 border-t border-amber-200 text-[10px] text-slate-500 bg-white/60 p-2 rounded-lg leading-relaxed">
-                  Formula: (Harga THB × Kurs Rp {exchangeConfig.thbToIdrRate}) + Markup {exchangeConfig.markupPercent}% + Jastip Flat {formatIDR(exchangeConfig.baseFeePerItemIDR)} + Ongkir Kargo Bagasi BKK-JKT.
+                  Formula: (Harga THB × Kurs Rp {exchangeConfig.thbToIdrRate}) + Markup {exchangeConfig.markupPercent}% + Jasa Titip sesuai harga barang + Penyesuaian kapasitas bagasi.
                 </div>
               )}
 

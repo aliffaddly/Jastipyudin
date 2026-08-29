@@ -396,8 +396,8 @@ export const CustomRequestModal: React.FC = () => {
               <div className="pt-2 border-t border-amber-200/80 flex items-center justify-between">
                 <div>
                   <span className="text-[11px] text-slate-500 block">Estimasi Total Biaya (Sampai JKT):</span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Harga Asli {formatIDR(breakdown.rawIdr)} + Fee & Ongkir {formatIDR(breakdown.jastipFeeIdr + breakdown.markupIdr + breakdown.weightFeeIdr)}
+                    <span className="text-xs text-slate-400 font-mono">
+                      Harga Asli {formatIDR(breakdown.rawIdr)} + handling fee & bagasi {formatIDR(breakdown.jastipFeeIdr + breakdown.markupIdr + breakdown.weightFeeIdr)}
                   </span>
                 </div>
                 <div className="text-right">

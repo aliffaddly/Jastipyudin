@@ -3,8 +3,21 @@ import { BangkokStore, Product, ShoppingTrip, ExchangeConfig, Order, CustomReque
 export const INITIAL_EXCHANGE_CONFIG: ExchangeConfig = {
   thbToIdrRate: 455, // 1 THB = Rp 455
   markupPercent: 12, // 12% standard service markup
-  baseFeePerItemIDR: 20000, // Rp 20.000 jastip fee / item
-  weightRatePer100gIDR: 12000, // Rp 12.000 per 100g (BKK -> JKT Air Cargo + Tax)
+  handlingFeeLowIDR: 10000,
+  handlingFeeMediumIDR: 15000,
+  handlingFeeHighIDR: 20000,
+  lowItemPriceThresholdIDR: 75000,
+  mediumItemPriceThresholdIDR: 300000,
+  baggageFeeTiers: [
+    { minWeightGrams: 0, feeIDR: 0 },
+    { minWeightGrams: 101, feeIDR: 5000 },
+    { minWeightGrams: 251, feeIDR: 15000 },
+    { minWeightGrams: 501, feeIDR: 35000 },
+    { minWeightGrams: 751, feeIDR: 60000 },
+    { minWeightGrams: 1001, feeIDR: 100000 },
+    { minWeightGrams: 1501, feeIDR: 150000 },
+  ],
+  maxAutomaticBaggageGrams: 2000,
 };
 
 export const DEMO_USERS: (User & { password: string })[] = [
