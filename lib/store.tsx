@@ -38,6 +38,17 @@ export interface PriceBreakdown {
   landedSingleItemIdr: number;
 }
 
+export interface LinePriceBreakdown extends PriceBreakdown {
+  quantity: number;
+  totalWeightGrams: number;
+  totalRawIdr: number;
+  totalMarkupIdr: number;
+  totalHandlingIdr: number;
+  baggageFeeIdr: number;
+  totalIdr: number;
+  requiresManualQuote: boolean;
+}
+
 interface AppContextType {
   // Auth & Session
   currentUser: User | null;
@@ -60,6 +71,7 @@ interface AppContextType {
   updateProduct: (id: string, product: Omit<Product, 'id'>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   uploadProductImage: (file: File) => Promise<string>;
+  deleteProductImage: (imageUrl: string) => Promise<void>;
   selectedCategory: CategoryType;
   setSelectedCategory: (cat: CategoryType) => void;
   searchQuery: string;
@@ -72,7 +84,7 @@ interface AppContextType {
   // Custom Requests
   customRequests: CustomRequest[];
   submitCustomRequest: (req: Omit<CustomRequest, 'id' | 'createdAt' | 'status'>) => Promise<string>;
-  updateCustomRequestStatus: (id: string, status: CustomRequest['status'], adminNotes?: string, quotedPriceTHB?: number) => Promise<void>;
+  updateCustomRequestStatus: (id: string, status: CustomRequest['status'], adminNotes?: string, quotedPriceTHB?: number, estimatedWeightGrams?: number) => Promise<void>;
   ensureCustomRequestsLoaded: () => Promise<void>;
   uploadRequestImage: (file: File) => Promise<string>;
 
@@ -124,6 +136,7 @@ interface AppContextType {
 
   // Calculation helpers
   calculatePriceBreakdown: (priceTHB: number, weightGrams?: number) => PriceBreakdown;
+  calculateLinePrice: (item: Pick<CartItem, 'priceTHB' | 'weightGrams' | 'quantity'>) => LinePriceBreakdown;
   formatIDR: (amount: number) => string;
   formatTHB: (amount: number) => string;
 }
@@ -394,6 +407,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     priceTHB: Number(row.price_thb),
     weightGrams: row.weight_grams,
     image: row.image_url || '',
+    images: Array.isArray(row.image_urls) && row.image_urls.length > 0
+      ? row.image_urls.filter((image: unknown): image is string => typeof image === 'string' && image.length > 0)
+      : (row.image_url ? [row.image_url] : []),
     description: row.description || '',
     variants: Array.isArray(row.variants) ? row.variants : [],
     popularBadge: row.popular_badge || undefined,
@@ -424,8 +440,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setExchangeConfigState({
         thbToIdrRate: Number(data.thb_to_idr_rate),
         markupPercent: Number(data.markup_percent),
-        baseFeePerItemIDR: Number(data.base_fee_per_item_idr),
-        weightRatePer100gIDR: Number(data.weight_rate_per_100g_idr),
+        handlingFeeLowIDR: Number(data.handling_fee_low_idr),
+        handlingFeeMediumIDR: Number(data.handling_fee_medium_idr),
+        handlingFeeHighIDR: Number(data.handling_fee_high_idr),
+        lowItemPriceThresholdIDR: Number(data.low_item_price_threshold_idr),
+        mediumItemPriceThresholdIDR: Number(data.medium_item_price_threshold_idr),
+        baggageFeeTiers: Array.isArray(data.baggage_fee_tiers) ? data.baggage_fee_tiers : INITIAL_EXCHANGE_CONFIG.baggageFeeTiers,
+        maxAutomaticBaggageGrams: Number(data.max_automatic_baggage_grams),
       });
     }
   };
@@ -482,7 +503,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    let unsubscribe = () => {};
     try {
       loadCatalog().catch((error) => console.error('Failed to load catalog', error));
       loadExchangeConfig().catch((error) => console.error('Failed to load exchange config', error));
@@ -518,23 +538,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (refundsLoaded) loadRefunds().catch((error) => console.error('Failed to refresh refunds', error));
         })
         .subscribe();
-      unsubscribe = () => {
-        realtimeChannel.unsubscribe();
-      };
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
-          setOrders([]);
-          loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
-          loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
-          loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          setTimeout(() => {
+            setOrders([]);
+            loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
+            loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
+            loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          }, 0);
         }
       });
       const { data } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session) {
-          setOrders([]);
-          loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
-          loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
-          loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          setTimeout(() => {
+            setOrders([]);
+            loadProfile(session.user.id).catch((error) => console.error('Failed to load profile', error));
+            loadUserCart(session.user.id).catch((error) => console.error('Failed to load cart', error));
+            loadUserOrders(session.user.id).catch((error) => console.error('Failed to load orders', error));
+          }, 0);
         } else if (isMounted) {
           setCurrentUser(null);
           setActiveView('buyer');
@@ -542,15 +563,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setRefundsLoaded(false);
         }
       });
-      unsubscribe = () => data.subscription.unsubscribe();
+      const authSubscription = data.subscription;
+
+      const cleanup = () => {
+        authSubscription.unsubscribe();
+        supabase.removeChannel(realtimeChannel);
+      };
+
+      return () => {
+        isMounted = false;
+        cleanup();
+      };
     } catch (error) {
       console.error(error);
     }
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
   }, []);
 
   // Business data is stored in Supabase only. Legacy localStorage is backup-only and no longer used as the source of truth.
@@ -604,8 +630,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await getSupabaseClient().rpc('update_exchange_config', {
       p_thb_to_idr_rate: config.thbToIdrRate,
       p_markup_percent: config.markupPercent,
-      p_base_fee_per_item_idr: config.baseFeePerItemIDR,
-      p_weight_rate_per_100g_idr: config.weightRatePer100gIDR,
+      p_handling_fee_low_idr: config.handlingFeeLowIDR,
+      p_handling_fee_medium_idr: config.handlingFeeMediumIDR,
+      p_handling_fee_high_idr: config.handlingFeeHighIDR,
+      p_low_item_price_threshold_idr: config.lowItemPriceThresholdIDR,
+      p_medium_item_price_threshold_idr: config.mediumItemPriceThresholdIDR,
+      p_baggage_fee_tiers: config.baggageFeeTiers,
+      p_max_automatic_baggage_grams: config.maxAutomaticBaggageGrams,
     });
     if (error) throw error;
     setExchangeConfigState(config);
@@ -634,6 +665,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data.publicUrl;
   };
 
+  const deleteProductImage = async (imageUrl: string): Promise<void> => {
+    const marker = '/storage/v1/object/public/product-images/';
+    const markerIndex = imageUrl.indexOf(marker);
+    if (markerIndex === -1) return;
+
+    const path = decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+    if (!path) return;
+
+    const { error } = await getSupabaseClient().storage.from('product-images').remove([path]);
+    if (error) throw error;
+  };
+
   const addProduct = async (prod: Product): Promise<void> => {
     const { error } = await getSupabaseClient().from('products').insert({
       id: prod.id,
@@ -646,6 +689,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       price_thb: prod.priceTHB,
       weight_grams: prod.weightGrams,
       image_url: prod.image,
+      image_urls: prod.images?.length ? prod.images : [prod.image],
       description: prod.description,
       variants: prod.variants || [],
       popular_badge: prod.popularBadge || null,
@@ -669,6 +713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       price_thb: product.priceTHB,
       weight_grams: product.weightGrams,
       image_url: product.image,
+      image_urls: product.images?.length ? product.images : [product.image],
       description: product.description,
       variants: product.variants || [],
       popular_badge: product.popularBadge || null,
@@ -759,12 +804,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     id: string, 
     status: CustomRequest['status'], 
     adminNotes?: string, 
-    quotedPriceTHB?: number
+    quotedPriceTHB?: number,
+    estimatedWeightGrams?: number
   ): Promise<void> => {
     const { error } = await getSupabaseClient().from('custom_requests').update({
       status,
       admin_notes: adminNotes || null,
       quoted_price_thb: quotedPriceTHB ?? null,
+      estimated_weight_grams: estimatedWeightGrams,
       updated_at: new Date().toISOString(),
     }).eq('id', id);
     if (error) throw error;
@@ -775,6 +822,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           status,
           adminNotes: adminNotes ?? req.adminNotes,
           quotedPriceTHB: quotedPriceTHB ?? req.quotedPriceTHB,
+          estimatedWeightGrams: estimatedWeightGrams ?? req.estimatedWeightGrams,
         };
       }
       return req;
@@ -783,14 +831,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveState({ customRequests: updated });
   };
 
+  const getCartItemIdentity = (item: Pick<CartItem, 'productId' | 'customRequestId' | 'name' | 'storeName' | 'priceTHB' | 'weightGrams' | 'selectedVariant' | 'notes' | 'isCustomRequest'>): string => {
+    const normalizedVariant = (item.selectedVariant || '').trim().toLowerCase();
+    const normalizedNotes = (item.notes || '').trim().toLowerCase();
+    const itemType = item.isCustomRequest ? 'custom' : 'catalog';
+    const productKey = item.productId || item.customRequestId || 'manual';
+
+    return `${itemType}:${productKey}:${item.name.trim().toLowerCase()}:${item.storeName.trim().toLowerCase()}:${item.priceTHB}:${item.weightGrams}:${normalizedVariant}:${normalizedNotes}`;
+  };
+
   // Cart operations per User
   const addToCart = async (item: Omit<CartItem, 'id'>): Promise<void> => {
     const targetUserId = currentUser?.id || 'guest';
+    const currentList = userCarts[targetUserId] || [];
+    const itemKey = getCartItemIdentity(item);
+    const existingItem = currentList.find((entry) => getCartItemIdentity(entry) === itemKey);
+
+    if (existingItem) {
+      const nextQuantity = existingItem.quantity + item.quantity;
+      const mergedList = currentList.map((entry) => entry.id === existingItem.id ? { ...entry, quantity: nextQuantity } : entry);
+      const newUserCarts = {
+        ...userCarts,
+        [targetUserId]: mergedList,
+      };
+
+      if (targetUserId !== 'guest') {
+        const { error } = await getSupabaseClient()
+          .from('cart_items')
+          .update({ quantity: nextQuantity })
+          .eq('id', existingItem.id);
+        if (error) throw error;
+      }
+
+      setUserCarts(newUserCarts);
+      saveState({ userCarts: newUserCarts });
+      setIsCartOpen(true);
+      return;
+    }
+
     const newItem: CartItem = {
       ...item,
       id: `cart-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       userId: targetUserId,
     };
+
     if (targetUserId !== 'guest') {
       const supabase = getSupabaseClient();
       const { data: cartRecord, error: cartError } = await supabase
@@ -823,15 +907,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: savedItem.id,
         userId: targetUserId,
       };
-      setUserCarts((current) => ({
-        ...current,
-        [targetUserId]: [...(current[targetUserId] || []), savedCartItem],
-      }));
+      const updatedList = [...currentList, savedCartItem];
+      const newUserCarts = {
+        ...userCarts,
+        [targetUserId]: updatedList,
+      };
+      setUserCarts(newUserCarts);
+      saveState({ userCarts: newUserCarts });
       setIsCartOpen(true);
       return;
     }
 
-    const currentList = userCarts[targetUserId] || [];
     const updatedList = [...currentList, newItem];
     const newUserCarts = {
       ...userCarts,
@@ -914,8 +1000,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawIdr = Math.round(priceTHB * exchangeConfig.thbToIdrRate);
     const markupIdr = Math.round(rawIdr * (exchangeConfig.markupPercent / 100));
     const baseWithMarkupIdr = rawIdr + markupIdr;
-    const jastipFeeIdr = exchangeConfig.baseFeePerItemIDR;
-    const weightFeeIdr = Math.round((Math.max(weightGrams, 50) / 100) * exchangeConfig.weightRatePer100gIDR);
+    const jastipFeeIdr = rawIdr < exchangeConfig.lowItemPriceThresholdIDR
+      ? exchangeConfig.handlingFeeLowIDR
+      : rawIdr <= exchangeConfig.mediumItemPriceThresholdIDR
+        ? exchangeConfig.handlingFeeMediumIDR
+        : exchangeConfig.handlingFeeHighIDR;
+    const weightFeeIdr = [...exchangeConfig.baggageFeeTiers]
+      .sort((a, b) => b.minWeightGrams - a.minWeightGrams)
+      .find((tier) => weightGrams >= tier.minWeightGrams)?.feeIDR || 0;
     const landedSingleItemIdr = baseWithMarkupIdr + jastipFeeIdr + weightFeeIdr;
 
     return {
@@ -925,6 +1017,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       jastipFeeIdr,
       weightFeeIdr,
       landedSingleItemIdr,
+    };
+  };
+
+  const calculateLinePrice = (item: Pick<CartItem, 'priceTHB' | 'weightGrams' | 'quantity'>): LinePriceBreakdown => {
+    const unit = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+    const quantity = Math.max(1, item.quantity);
+    const totalWeightGrams = item.weightGrams * quantity;
+    const baggageFeeIdr = [...exchangeConfig.baggageFeeTiers]
+      .sort((a, b) => b.minWeightGrams - a.minWeightGrams)
+      .find((tier) => totalWeightGrams >= tier.minWeightGrams)?.feeIDR || 0;
+    const totalRawIdr = unit.rawIdr * quantity;
+    const totalMarkupIdr = unit.markupIdr * quantity;
+    const totalHandlingIdr = unit.jastipFeeIdr * quantity;
+    const totalIdr = totalRawIdr + totalMarkupIdr + totalHandlingIdr + baggageFeeIdr;
+
+    return {
+      ...unit,
+      quantity,
+      totalWeightGrams,
+      totalRawIdr,
+      totalMarkupIdr,
+      totalHandlingIdr,
+      baggageFeeIdr,
+      weightFeeIdr: baggageFeeIdr,
+      totalIdr,
+      landedSingleItemIdr: Math.round(totalIdr / quantity),
+      requiresManualQuote: totalWeightGrams > exchangeConfig.maxAutomaticBaggageGrams,
     };
   };
 
@@ -960,11 +1079,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let weightFeeIDR = 0;
 
     cart.forEach((item) => {
-      const breakdown = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+      const breakdown = calculateLinePrice(item);
       subtotalTHB += item.priceTHB * item.quantity;
-      subtotalIDR += breakdown.baseWithMarkupIdr * item.quantity;
-      jastipFeeIDR += breakdown.jastipFeeIdr * item.quantity;
-      weightFeeIDR += breakdown.weightFeeIdr * item.quantity;
+      subtotalIDR += breakdown.totalRawIdr + breakdown.totalMarkupIdr;
+      jastipFeeIDR += breakdown.totalHandlingIdr;
+      weightFeeIDR += breakdown.baggageFeeIdr;
     });
 
     const totalIDR = subtotalIDR + jastipFeeIDR + weightFeeIDR;
@@ -1438,6 +1557,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateProduct,
         deleteProduct,
         uploadProductImage,
+        deleteProductImage,
         selectedCategory,
         setSelectedCategory,
         searchQuery,
@@ -1484,6 +1604,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedProduct,
         setSelectedProduct,
         calculatePriceBreakdown,
+        calculateLinePrice,
         formatIDR,
         formatTHB,
       }}

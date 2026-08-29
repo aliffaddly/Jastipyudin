@@ -20,6 +20,7 @@ create table public.products (
   price_thb numeric not null check (price_thb > 0),
   weight_grams integer not null check (weight_grams > 0),
   image_url text not null default '',
+  image_urls jsonb not null default '[]'::jsonb,
   description text not null default '',
   variants jsonb not null default '[]'::jsonb,
   popular_badge text,

@@ -26,6 +26,7 @@ export const CheckoutModal: React.FC = () => {
     setIsCheckoutOpen, 
     cart, 
     calculatePriceBreakdown, 
+    calculateLinePrice,
     formatIDR, 
     formatTHB,
     createOrder,
@@ -40,10 +41,12 @@ export const CheckoutModal: React.FC = () => {
   const [customerCity, setCustomerCity] = useState(currentUser?.city || 'Jakarta Selatan');
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'BCA' | 'MANDIRI'>('QRIS');
   const [copiedBank, setCopiedBank] = useState(false);
+  const [copiedAmount, setCopiedAmount] = useState(false);
   const [paymentTimerSeconds, setPaymentTimerSeconds] = useState(899); // 15 mins
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [createdOrderNumber, setCreatedOrderNumber] = useState('');
+  const [completedTotal, setCompletedTotal] = useState<number | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export const CheckoutModal: React.FC = () => {
     setIsProcessing(false);
     setIsCompleted(false);
     setCreatedOrderNumber('');
+    setCompletedTotal(null);
     setPaymentTimerSeconds(899);
   }, [isCheckoutOpen, currentUser?.id, currentUser?.name, currentUser?.phone, currentUser?.address, currentUser?.city]);
 
@@ -80,11 +84,11 @@ export const CheckoutModal: React.FC = () => {
   let totalWeightGrams = 0;
 
   cart.forEach((item) => {
-    const bd = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+    const bd = calculateLinePrice(item);
     totalRawTHB += item.priceTHB * item.quantity;
-    totalRawIDR += bd.baseWithMarkupIdr * item.quantity;
-    totalJastipIDR += bd.jastipFeeIdr * item.quantity;
-    totalWeightFeeIDR += bd.weightFeeIdr * item.quantity;
+    totalRawIDR += bd.totalRawIdr + bd.totalMarkupIdr;
+    totalJastipIDR += bd.totalHandlingIdr;
+    totalWeightFeeIDR += bd.baggageFeeIdr;
     totalWeightGrams += item.weightGrams * item.quantity;
   });
 
@@ -93,7 +97,9 @@ export const CheckoutModal: React.FC = () => {
   const handleCopyAccount = (text: string) => {
     navigator.clipboard?.writeText(text);
     setCopiedBank(true);
+    setCopiedAmount(true);
     setTimeout(() => setCopiedBank(false), 2000);
+    setTimeout(() => setCopiedAmount(false), 2000);
   };
 
   const handleConfirmPayment = () => {
@@ -113,9 +119,10 @@ export const CheckoutModal: React.FC = () => {
         customerCity,
         paymentMethod,
         });
-        await submitPayment(order.id, grandTotal, paymentMethod, proofFile);
+        await submitPayment(order.id, order.totalIDR, paymentMethod, proofFile);
 
         setCreatedOrderNumber(order.orderNumber);
+        setCompletedTotal(order.totalIDR);
         setIsProcessing(false);
         setIsCompleted(true);
 
@@ -192,7 +199,7 @@ export const CheckoutModal: React.FC = () => {
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-sm text-slate-900">
                 <span>Total Tagihan:</span>
-                <span className="text-rose-600 font-extrabold">{formatIDR(grandTotal)}</span>
+                <span className="text-rose-600 font-extrabold">{formatIDR(completedTotal ?? grandTotal)}</span>
               </div>
             </div>
 
@@ -310,7 +317,7 @@ export const CheckoutModal: React.FC = () => {
                       </span>
                     </div>
                     <span className="font-bold text-slate-800 shrink-0">
-                      {formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * item.quantity)}
+                      {formatIDR(calculateLinePrice(item).totalIdr)}
                     </span>
                   </div>
                 ))}
@@ -327,7 +334,7 @@ export const CheckoutModal: React.FC = () => {
                   <span className="font-semibold text-slate-800">{formatIDR(totalJastipIDR)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>3. Total Estimasi Kargo Udara BKK ✈️ JKT (±{totalWeightGrams}g):</span>
+                  <span>3. Penyesuaian Kapasitas Bagasi (±{totalWeightGrams}g):</span>
                   <span className="font-semibold text-slate-800">{formatIDR(totalWeightFeeIDR)}</span>
                 </div>
                 
@@ -337,6 +344,15 @@ export const CheckoutModal: React.FC = () => {
                     {formatIDR(grandTotal)}
                   </span>
                 </div>
+
+                <button
+                      type="button"
+                      onClick={() => handleCopyAccount(grandTotal.toString())}
+                      className="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                    >
+                      {copiedAmount ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedAmount ? 'Tersalin' : 'Salin'}</span>
+                    </button>
               </div>
             </div>
 
@@ -392,25 +408,29 @@ export const CheckoutModal: React.FC = () => {
               {paymentMethod === 'QRIS' ? (
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-bold text-slate-700">QRIS Dinamis Jastipyudin</span>
-                    <span className="text-[11px] font-mono font-bold text-rose-600 flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                    <span className="text-[11px] font-bold text-slate-700">QRIS Jastipyudin</span>
+                    {/* <span className="text-[11px] font-mono font-bold text-rose-600 flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                       <Clock className="w-3 h-3" />
                       Berlaku {formatTimer(paymentTimerSeconds)}
-                    </span>
+                    </span> */}
                   </div>
 
                   {/* QR Box */}
-                  <div className="w-44 h-44 bg-white p-3 rounded-2xl border border-slate-300 mx-auto mb-2 flex flex-col items-center justify-center shadow-inner relative group">
+                  <div className="w-55 h-77 bg-white p-3 rounded-2xl border border-slate-300 mx-auto mb-2 flex flex-col items-center justify-center shadow-inner relative group">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=JASTIPYUDIN-TH-${grandTotal}`}
+                      // src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=JASTIPYUDIN-TH-${grandTotal}`}
+                      src="https://bcvhnwlucfbljjewumbh.supabase.co/storage/v1/object/public/payment-assets/Kode%20QRIS%20MUHAMMAD%20ALIF%20FADDLY%20RESPATYADI,%20Hiburan.PNG"
                       alt="QRIS Code"
-                      className="w-36 h-36"
+                      className="w-45 h-60"
                     />
-                    <div className="text-[9px] font-bold text-slate-500 mt-1">NMID: ID1020268891001</div>
+                    {/* <div className="text-[9px] font-bold text-slate-500 mt-1">NMID: ID1020268891001</div> */}
                   </div>
 
                   <p className="text-[11px] text-slate-500 mb-2">
                     Scan via GoPay, OVO, Dana, BCA Mobile, Livin, dll.
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Harap upload bukti transfer setelah melakukan transfer.
                   </p>
                 </div>
               ) : (
@@ -424,15 +444,15 @@ export const CheckoutModal: React.FC = () => {
 
                   <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-300 mb-2">
                     <div>
-                      <p className="text-[10px] text-slate-400">Atas Nama: PT JASTIP YUDIN THAILAND</p>
+                      <p className="text-[10px] text-slate-400">Atas Nama: MUHAMMAD ALIF FADDLY RESPATYADI</p>
                       <p className="font-mono font-black text-sm text-slate-900">
-                        {paymentMethod === 'BCA' ? '8830-1928-4410' : '1370-0099-2819'}
+                        {paymentMethod === 'BCA' ? '4210408571' : '1570010757871'}
                       </p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => handleCopyAccount(paymentMethod === 'BCA' ? '883019284410' : '137000992819')}
+                      onClick={() => handleCopyAccount(paymentMethod === 'BCA' ? '4210408571' : '1570010757871')}
                       className="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
                     >
                       {copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -441,7 +461,7 @@ export const CheckoutModal: React.FC = () => {
                   </div>
 
                   <p className="text-[10px] text-slate-500">
-                    Sistem otomatis memverifikasi mutasi bank dalam 1-2 menit setelah transfer selesai.
+                    Harap upload bukti transfer setelah melakukan transfer.
                   </p>
                 </div>
               )}

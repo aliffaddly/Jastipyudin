@@ -127,7 +127,7 @@ export const TripBanner: React.FC = () => {
             </div>
             <div>
               <p className="text-[10px] text-rose-200 uppercase font-semibold">Penerbangan Pulang</p>
-              <p className="text-xs font-bold text-white">{trip.flightDate} ✈️ JKT (Cargo)</p>
+              <p className="text-xs font-bold text-white">{trip.flightDate} ✈️ JKT</p>
             </div>
           </div>
 

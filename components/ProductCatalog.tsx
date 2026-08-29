@@ -11,7 +11,9 @@ import {
   Info,
   CheckCircle,
   Eye,
-  Search
+  Search,
+  ExternalLink,
+  MessageCircle
 } from 'lucide-react';
 import { Product } from '@/types';
 
@@ -71,7 +73,7 @@ export const ProductCatalog: React.FC = () => {
             Katalog Titipan Populer Bangkok
           </h2>
           <p className="text-xs text-slate-500">
-            Harga THB resmi dikonversikan otomatis ke Rupiah lengkap dengan estimasi ongkos kirim kargo & jastip fee.
+            Harga THB resmi dikonversikan otomatis ke Rupiah lengkap dengan estimasi jastip fee.
           </p>
         </div>
 
@@ -88,7 +90,7 @@ export const ProductCatalog: React.FC = () => {
           </div>
           <h3 className="font-bold text-slate-800 text-base mb-1">Produk Tidak Ditemukan</h3>
           <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-            Tidak menemukan barang Bangkok yang kamu cari? Gunakan fitur **Titip Request Khusus** untuk memesan langsung ke shopper kami.
+            Tidak menemukan barang Bangkok yang kamu cari? Gunakan fitur "Titip Khusus" untuk memesan langsung ke shopper kami.
           </p>
         </div>
       ) : (
@@ -108,7 +110,7 @@ export const ProductCatalog: React.FC = () => {
                   onClick={() => setSelectedProduct(product)}
                 >
                   <img
-                    src={product.image}
+                    src={product.images?.[0] || product.image}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
@@ -219,6 +221,28 @@ export const ProductCatalog: React.FC = () => {
           })}
         </div>
       )}
+      <br />
+      <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-emerald-950">
+            <div className="flex items-center space-x-2 mb-2 font-extrabold text-xs text-emerald-900">
+              <MessageCircle className="w-4 h-4 text-emerald-600" />
+              <span>Mau Tanya Admin?</span>
+            </div>
+            <p className="text-xs text-emerald-800/90 leading-relaxed mb-4">
+              Hubungi via WhatsApp untuk pertanyaan seputar titipan Bangkok, status pesanan, atau request barang khusus.
+            </p>
+            <p className="text-xs text-emerald-800/90 leading-relaxed mb-4">
+            </p>
+
+            <a
+              href="https://wa.me/6285952743914?text=Halo%20Admin%20Jastipyudin,%20mau%20tanya%20status%20titipan%20Bangkok"
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20 transition-all"
+            >
+              <span>Chat WhatsApp Admin Jastipyudin</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
     </div>
   );
 };

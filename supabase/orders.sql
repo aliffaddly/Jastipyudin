@@ -122,11 +122,23 @@ begin
   update public.orders o
   set refund_amount_idr = coalesce((
     select sum(
-      round((oi.price_thb * ec.thb_to_idr_rate * (1 + ec.markup_percent / 100.0)) + ec.base_fee_per_item_idr + ((greatest(oi.weight_grams, 50) / 100.0) * ec.weight_rate_per_100g_idr))
-      * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
+      (ec.raw_idr + round(ec.raw_idr * ec.markup_percent / 100.0)
+      + case
+          when ec.raw_idr < ec.low_item_price_threshold_idr then ec.handling_fee_low_idr
+          when ec.raw_idr <= ec.medium_item_price_threshold_idr then ec.handling_fee_medium_idr
+          else ec.handling_fee_high_idr
+        end) * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
+      + coalesce((select max((tier->>'feeIDR')::numeric) from jsonb_array_elements(ec.baggage_fee_tiers) tier where (tier->>'minWeightGrams')::numeric <= oi.weight_grams), 0)
+        * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
     )
     from public.order_items oi
-    cross join lateral (select * from public.exchange_configs where is_active = true order by updated_at desc limit 1) ec
+    cross join lateral (
+      select *, round(oi.price_thb * thb_to_idr_rate) as raw_idr
+      from public.exchange_configs
+      where is_active = true
+      order by updated_at desc
+      limit 1
+    ) ec
     where oi.order_id = o.id
       and oi.shortage_resolution in ('REFUND', 'CANCEL')
   ), 0)

@@ -47,12 +47,24 @@ declare
   refund_amount numeric;
 begin
   select oi.order_id, o.user_id,
-    round((oi.price_thb * ec.thb_to_idr_rate * (1 + ec.markup_percent / 100.0)) + ec.base_fee_per_item_idr + ((greatest(oi.weight_grams, 50) / 100.0) * ec.weight_rate_per_100g_idr))
-      * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
+    (ec.raw_idr + round(ec.raw_idr * ec.markup_percent / 100.0)
+      + case
+          when ec.raw_idr < ec.low_item_price_threshold_idr then ec.handling_fee_low_idr
+          when ec.raw_idr <= ec.medium_item_price_threshold_idr then ec.handling_fee_medium_idr
+          else ec.handling_fee_high_idr
+        end) * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
+      + coalesce((select max((tier->>'feeIDR')::numeric) from jsonb_array_elements(ec.baggage_fee_tiers) tier where (tier->>'minWeightGrams')::numeric <= oi.weight_grams), 0)
+        * greatest(0, oi.ordered_quantity - oi.purchased_quantity)
   into target_order_id, target_user_id, refund_amount
   from public.order_items oi
   join public.orders o on o.id = oi.order_id
-  cross join lateral (select * from public.exchange_configs where is_active = true order by updated_at desc limit 1) ec
+  cross join lateral (
+    select *, round(oi.price_thb * thb_to_idr_rate) as raw_idr
+    from public.exchange_configs
+    where is_active = true
+    order by updated_at desc
+    limit 1
+  ) ec
   where oi.id = p_order_item_id
     and (o.user_id = auth.uid() or exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'ADMIN'))
     and oi.fulfillment_status in ('PARTIAL', 'FAILED', 'CANCELLED')
@@ -64,7 +76,9 @@ begin
 
   insert into public.refunds (order_id, order_item_id, user_id, amount_idr)
   values (target_order_id, p_order_item_id, target_user_id, refund_amount)
-  on conflict (order_item_id) do update set updated_at = now()
+  on conflict (order_item_id) do update
+  set amount_idr = excluded.amount_idr,
+      updated_at = now()
   returning id into refund_id;
 
   update public.orders
@@ -74,5 +88,34 @@ begin
   return refund_id;
 end;
 $$;
+
+update public.refunds refund
+set amount_idr = calculation.amount_idr,
+    updated_at = now()
+from (
+  select oi.id as order_item_id,
+    (ec.raw_idr + round(ec.raw_idr * ec.markup_percent / 100.0)
+      + case
+          when ec.raw_idr < ec.low_item_price_threshold_idr then ec.handling_fee_low_idr
+          when ec.raw_idr <= ec.medium_item_price_threshold_idr then ec.handling_fee_medium_idr
+          else ec.handling_fee_high_idr
+        end
+      + coalesce((
+          select max((tier->>'feeIDR')::numeric)
+          from jsonb_array_elements(ec.baggage_fee_tiers) tier
+          where (tier->>'minWeightGrams')::numeric <= oi.weight_grams
+        ), 0)
+    ) * greatest(0, oi.ordered_quantity - oi.purchased_quantity) as amount_idr
+  from public.order_items oi
+  cross join lateral (
+    select *, round(oi.price_thb * thb_to_idr_rate) as raw_idr
+    from public.exchange_configs
+    where is_active = true
+    order by updated_at desc
+    limit 1
+  ) ec
+) calculation
+where refund.order_item_id = calculation.order_item_id
+  and refund.status in ('PENDING', 'PROCESSING');
 
 grant execute on function public.create_order_item_refund(text) to authenticated;

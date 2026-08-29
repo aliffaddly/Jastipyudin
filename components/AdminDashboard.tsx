@@ -112,13 +112,14 @@ export const AdminDashboard: React.FC = () => {
     updateProduct,
     deleteProduct,
     uploadProductImage,
+    deleteProductImage,
     stores,
     formatIDR, 
     formatTHB,
     calculatePriceBreakdown
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'routes' | 'currency' | 'trip' | 'requests' | 'manage' | 'list' | 'payments' | 'refunds' | 'sales' | 'shipping'>('routes');
+  const [activeTab, setActiveTab] = useState<'routes' | 'currency' | 'trip' | 'requests' | 'manage' | 'list' | 'payments' | 'refunds' | 'sales' | 'shipping'>('sales');
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Lazy-load admin-only data only when the relevant tab is opened for the first time.
@@ -134,8 +135,13 @@ export const AdminDashboard: React.FC = () => {
   // Currency controller state
   const [rateInput, setRateInput] = useState<number>(exchangeConfig.thbToIdrRate);
   const [markupInput, setMarkupInput] = useState<number>(exchangeConfig.markupPercent);
-  const [baseFeeInput, setBaseFeeInput] = useState<number>(exchangeConfig.baseFeePerItemIDR);
-  const [weightRateInput, setWeightRateInput] = useState<number>(exchangeConfig.weightRatePer100gIDR);
+  const [handlingLowInput, setHandlingLowInput] = useState<number>(exchangeConfig.handlingFeeLowIDR);
+  const [handlingMediumInput, setHandlingMediumInput] = useState<number>(exchangeConfig.handlingFeeMediumIDR);
+  const [handlingHighInput, setHandlingHighInput] = useState<number>(exchangeConfig.handlingFeeHighIDR);
+  const [lowThresholdInput, setLowThresholdInput] = useState<number>(exchangeConfig.lowItemPriceThresholdIDR);
+  const [mediumThresholdInput, setMediumThresholdInput] = useState<number>(exchangeConfig.mediumItemPriceThresholdIDR);
+  const [baggageTiersText, setBaggageTiersText] = useState(JSON.stringify(exchangeConfig.baggageFeeTiers));
+  const [maxBaggageInput, setMaxBaggageInput] = useState<number>(exchangeConfig.maxAutomaticBaggageGrams);
 
   // Trip editor state
   const [tripTitle, setTripTitle] = useState(trip.title);
@@ -159,6 +165,7 @@ export const AdminDashboard: React.FC = () => {
     priceTHB: 0,
     weightGrams: 100,
     image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
+    images: ['https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80'],
     description: '',
     variants: [],
     popularBadge: '',
@@ -182,8 +189,13 @@ export const AdminDashboard: React.FC = () => {
       await setExchangeConfig({
         thbToIdrRate: Number(rateInput),
         markupPercent: Number(markupInput),
-        baseFeePerItemIDR: Number(baseFeeInput),
-        weightRatePer100gIDR: Number(weightRateInput),
+        handlingFeeLowIDR: Number(handlingLowInput),
+        handlingFeeMediumIDR: Number(handlingMediumInput),
+        handlingFeeHighIDR: Number(handlingHighInput),
+        lowItemPriceThresholdIDR: Number(lowThresholdInput),
+        mediumItemPriceThresholdIDR: Number(mediumThresholdInput),
+        baggageFeeTiers: JSON.parse(baggageTiersText),
+        maxAutomaticBaggageGrams: Number(maxBaggageInput),
       });
       showToast('Kurs & markup berhasil diperbarui secara realtime!');
     } catch (error) {
@@ -212,6 +224,7 @@ export const AdminDashboard: React.FC = () => {
     setProductForm({
       name: '', brand: '', category: 'FASHION', storeId: stores[0]?.id || '', storeName: stores[0]?.name || '',
       priceTHB: 0, weightGrams: 100, image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
+      images: ['https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80'],
       description: '', variants: [], popularBadge: '', isPreOrder: false, stockStatus: 'AVAILABLE',
     });
   };
@@ -224,6 +237,22 @@ export const AdminDashboard: React.FC = () => {
     else addProduct({ ...payload, id: `prod-${Date.now()}` });
     resetProductForm();
     showToast(editingProductId ? 'Produk katalog berhasil diperbarui!' : 'Produk berhasil ditambahkan ke katalog!');
+  };
+
+  const removeProductImage = async (image: string, index: number) => {
+    if (productForm.images && productForm.images.length <= 1) {
+      showToast('Produk harus memiliki minimal satu foto.');
+      return;
+    }
+
+    try {
+      await deleteProductImage(image);
+      const images = (productForm.images || [productForm.image]).filter((_, imageIndex) => imageIndex !== index);
+      setProductForm({ ...productForm, image: images[0] || '', images });
+      showToast('Foto produk berhasil dihapus.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Gagal menghapus foto produk.');
+    }
   };
 
   const editProduct = (product: Product) => {
@@ -241,7 +270,7 @@ export const AdminDashboard: React.FC = () => {
 
   const sendRequestOffer = (req: typeof customRequests[number]) => {
     const edit = getRequestEdit(req);
-    updateCustomRequestStatus(req.id, 'OFFER_SENT', edit.adminNotes || 'Penawaran sudah dikirim ke customer.', edit.priceTHB);
+    updateCustomRequestStatus(req.id, 'OFFER_SENT', edit.adminNotes || 'Penawaran sudah dikirim ke customer.', edit.priceTHB, edit.weightGrams);
     showToast(`Penawaran ${req.id} berhasil dikirim ke customer.`);
   };
 
@@ -265,7 +294,7 @@ export const AdminDashboard: React.FC = () => {
         stockStatus: 'AVAILABLE',
       });
     }
-    updateCustomRequestStatus(req.id, visibility, edit.adminNotes, edit.priceTHB);
+    updateCustomRequestStatus(req.id, visibility, edit.adminNotes, edit.priceTHB, edit.weightGrams);
     showToast(visibility === 'PUBLISHED' ? 'Request dipublikasikan ke katalog!' : 'Request disimpan sebagai private offer.');
   };
 
@@ -375,15 +404,13 @@ export const AdminDashboard: React.FC = () => {
       {/* Tab Navigation (No Live Drops) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none">
         <button
-          onClick={() => setActiveTab('routes')}
+          onClick={() => setActiveTab('sales')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'routes'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <Compass className="w-4 h-4" />
-          <span>Antrean Belanja Berdasarkan Rute ({Object.keys(fulfillmentByLocation).length} Lokasi)</span>
+          <DollarSign className="w-4 h-4" />
+          <span>Sales Dashboard</span>
         </button>
 
         <button
@@ -396,6 +423,18 @@ export const AdminDashboard: React.FC = () => {
         >
           <DollarSign className="w-4 h-4" />
           <span>Pengatur Kurs & Markup</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('routes')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'routes'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Compass className="w-4 h-4" />
+          <span>Antrean Belanja Berdasarkan Rute ({Object.keys(fulfillmentByLocation).length} Lokasi)</span>
         </button>
 
         <button
@@ -432,16 +471,6 @@ export const AdminDashboard: React.FC = () => {
         >
           <Truck className="w-4 h-4" />
           <span>Pengiriman ({orders.filter((order) => order.paymentStatus === 'CONFIRMED' && order.status !== 'DELIVERED').length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Sales Dashboard</span>
         </button>
 
         <button
@@ -1145,38 +1174,40 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Handling Fee Tetap per Item (IDR)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    step="1000"
-                    value={baseFeeInput}
-                    onChange={(e) => setBaseFeeInput(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/30"
-                  />
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Handling Barang Murah (IDR)</label>
+                <input type="number" step="1000" value={handlingLowInput} onChange={(e) => setHandlingLowInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Handling Barang Menengah (IDR)</label>
+                <input type="number" step="1000" value={handlingMediumInput} onChange={(e) => setHandlingMediumInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Handling Barang Mahal (IDR)</label>
+                <input type="number" step="1000" value={handlingHighInput} onChange={(e) => setHandlingHighInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
+              </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tarif Kargo Udara per 100 Gram (IDR)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    step="1000"
-                    value={weightRateInput}
-                    onChange={(e) => setWeightRateInput(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/30"
-                  />
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Batas Barang Murah (IDR)</label>
+                <input type="number" step="1000" value={lowThresholdInput} onChange={(e) => setLowThresholdInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Batas Barang Menengah (IDR)</label>
+                <input type="number" step="1000" value={mediumThresholdInput} onChange={(e) => setMediumThresholdInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Maksimal Berat Otomatis (gram)</label>
+                <input type="number" step="100" value={maxBaggageInput} onChange={(e) => setMaxBaggageInput(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Tier Penyesuaian Kapasitas Bagasi (JSON)</label>
+              <textarea value={baggageTiersText} onChange={(e) => setBaggageTiersText(e.target.value)} rows={4} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800" />
+              <span className="text-[10px] text-slate-400 mt-1 block">Contoh format: [{`{"minWeightGrams":0,"feeIDR":0}`}]</span>
             </div>
 
             <button
@@ -1416,7 +1447,7 @@ export const AdminDashboard: React.FC = () => {
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-slate-900">Kelola Jastipan & Titipan</h3>
+              <h3 className="text-lg font-black text-slate-900">Kelola Jastipan</h3>
               <p className="text-xs text-slate-500">
                 Kelola item yang tampil di katalog utama. Item request khusus juga dapat dipublish dari menu Request Masuk.
               </p>
@@ -1443,28 +1474,44 @@ export const AdminDashboard: React.FC = () => {
               <input required type="number" min="1" placeholder="Harga THB *" value={productForm.priceTHB || ''} onChange={(e) => setProductForm({ ...productForm, priceTHB: Number(e.target.value) })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
               <input required type="number" min="1" placeholder="Berat gram *" value={productForm.weightGrams || ''} onChange={(e) => setProductForm({ ...productForm, weightGrams: Number(e.target.value) })} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
               <div className="sm:col-span-2 flex items-center gap-3">
-                {productForm.image && (
-                  <img src={productForm.image} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {(productForm.images?.length ? productForm.images : [productForm.image]).map((image, index) => (
+                    <div key={`${image}-${index}`} className="relative group">
+                      <img src={image} alt={`Preview ${index + 1}`} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                      <button
+                        type="button"
+                        onClick={() => removeProductImage(image, index)}
+                        className="absolute -right-1.5 -top-1.5 flex w-5 h-5 items-center justify-center rounded-full bg-rose-600 text-white shadow opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                        aria-label={`Hapus foto ${index + 1}`}
+                        title="Hapus foto"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer">
                   <Camera className="w-4 h-4 text-amber-600" />
-                  <span>{isUploadingProductImage ? 'Mengunggah...' : 'Upload foto produk'}</span>
+                  <span>{isUploadingProductImage ? 'Mengunggah...' : 'Upload foto produk (bisa banyak)'}</span>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
+                    multiple
                     className="hidden"
                     disabled={isUploadingProductImage}
                     onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
+                      const files = Array.from(event.target.files || []);
+                      if (files.length === 0) return;
                       setIsUploadingProductImage(true);
                       try {
-                        const url = await uploadProductImage(file);
-                        setProductForm({ ...productForm, image: url });
+                        const urls = await Promise.all(files.map((file) => uploadProductImage(file)));
+                        const images = [...(productForm.images || (productForm.image ? [productForm.image] : [])), ...urls];
+                        setProductForm({ ...productForm, image: images[0] || productForm.image, images });
                       } catch (error) {
                         showToast(error instanceof Error ? error.message : 'Gagal mengunggah foto produk.');
                       } finally {
                         setIsUploadingProductImage(false);
+                        event.target.value = '';
                       }
                     }}
                   />
@@ -1484,7 +1531,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {products.map((product) => (
               <div key={product.id} className="bg-white rounded-2xl border border-slate-200 p-3 flex gap-3 items-center shadow-sm">
-                <img src={product.image} alt={product.name} className="w-16 h-16 rounded-xl object-cover bg-slate-100 shrink-0" />
+                <img src={product.images?.[0] || product.image} alt={product.name} className="w-16 h-16 rounded-xl object-cover bg-slate-100 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-amber-700 font-bold truncate">{product.storeName}</p>
                   <h4 className="text-sm font-bold text-slate-900 truncate">{product.name}</h4>

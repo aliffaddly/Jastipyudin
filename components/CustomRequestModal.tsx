@@ -303,13 +303,19 @@ export const CustomRequestModal: React.FC = () => {
                   </button>
                 ))}
               </div>
-
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="Preview"
+                  className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                />
+              )}
               <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer w-fit">
                 <UploadCloud className="w-4 h-4 text-amber-600" />
                 <span>{isUploadingImage ? 'Mengunggah...' : 'Upload foto sendiri'}</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
                   className="hidden"
                   disabled={isUploadingImage}
                   onChange={async (event) => {
@@ -375,8 +381,8 @@ export const CustomRequestModal: React.FC = () => {
                   <div className="relative">
                     <input
                       type="number"
-                      min="50"
-                      step="50"
+                      min="0"
+                      step="0.1"
                       value={estimatedWeightGrams}
                       onChange={(e) => setEstimatedWeightGrams(Number(e.target.value))}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/40"
@@ -390,8 +396,8 @@ export const CustomRequestModal: React.FC = () => {
               <div className="pt-2 border-t border-amber-200/80 flex items-center justify-between">
                 <div>
                   <span className="text-[11px] text-slate-500 block">Estimasi Total Biaya (Sampai JKT):</span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Harga Asli {formatIDR(breakdown.rawIdr)} + Fee & Ongkir {formatIDR(breakdown.jastipFeeIdr + breakdown.markupIdr + breakdown.weightFeeIdr)}
+                    <span className="text-xs text-slate-400 font-mono">
+                      Harga Asli {formatIDR(breakdown.rawIdr)} + handling fee & bagasi {formatIDR(breakdown.jastipFeeIdr + breakdown.markupIdr + breakdown.weightFeeIdr)}
                   </span>
                 </div>
                 <div className="text-right">
@@ -412,7 +418,7 @@ export const CustomRequestModal: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
               <p className="text-[10px] text-center text-slate-400 mt-2">
-                🔒 Pembayaran DP baru ditagihkan setelah Shopper mengonfirmasi ketersediaan barang di Bangkok.
+                🔒 Pembayaran baru ditagihkan setelah Shopper mengonfirmasi ketersediaan barang di Bangkok.
               </p>
             </div>
 

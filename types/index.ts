@@ -54,6 +54,7 @@ export interface Product {
   priceTHB: number;
   weightGrams: number;
   image: string;
+  images?: string[];
   description: string;
   variants?: string[];
   popularBadge?: string;
@@ -94,11 +95,24 @@ export interface ShoppingTrip {
   announcement: string;
 }
 
+export interface BaggageFeeTier {
+  minWeightGrams: number;
+  feeIDR: number;
+}
+
 export interface ExchangeConfig {
-  thbToIdrRate: number; // e.g. 455 IDR per 1 THB
-  markupPercent: number; // e.g. 12%
-  baseFeePerItemIDR: number; // e.g. 20,000 IDR
-  weightRatePer100gIDR: number; // e.g. 12,000 IDR per 100g
+  thbToIdrRate: number;
+  markupPercent: number;
+
+  handlingFeeLowIDR: number;
+  handlingFeeMediumIDR: number;
+  handlingFeeHighIDR: number;
+
+  lowItemPriceThresholdIDR: number;
+  mediumItemPriceThresholdIDR: number;
+
+  baggageFeeTiers: BaggageFeeTier[];
+  maxAutomaticBaggageGrams: number;
 }
 
 export interface CartItem {

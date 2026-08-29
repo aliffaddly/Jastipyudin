@@ -26,7 +26,7 @@ export const OrderTrackingView: React.FC = () => {
     setCurrentActiveOrderId, 
     formatIDR, 
     formatTHB,
-    calculatePriceBreakdown,
+    calculateLinePrice,
     resolveOrderItemShortage,
     refunds,
     setBuyerTab,
@@ -56,7 +56,11 @@ export const OrderTrackingView: React.FC = () => {
     return Math.max(0, orderedQuantity - purchasedQuantity);
   };
   const refundTotal = refundItems.reduce((total, item) => {
-    return total + calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * getMissingQuantity(item);
+    return total + calculateLinePrice({
+      priceTHB: item.priceTHB,
+      weightGrams: item.weightGrams,
+      quantity: getMissingQuantity(item),
+    }).totalIdr;
   }, 0);
 
   const confirmShortageResolution = (itemName: string, resolution: 'REFUND' | 'CANCEL') => {
@@ -243,7 +247,7 @@ export const OrderTrackingView: React.FC = () => {
           {activeOrder.status === 'DELIVERED' ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <p className="text-xs font-bold text-emerald-800">Pesanan sudah kamu konfirmasi selesai dan diterima. Terima kasih sudah jastip di Jastipyduin!</p>
+              <p className="text-xs font-bold text-emerald-800">Pesanan sudah kamu konfirmasi selesai dan diterima. Terima kasih sudah jastip di Jastipyudin!</p>
             </div>
           ) : (
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
@@ -310,7 +314,7 @@ export const OrderTrackingView: React.FC = () => {
                     )}
                     <div className="flex justify-between items-center mt-1 text-[11px]">
                       <span className="text-slate-500 font-semibold">{item.purchasedQuantity ?? item.quantity} dari {item.orderedQuantity ?? item.quantity}x @ {formatTHB(item.priceTHB)}</span>
-                      <span className="font-extrabold text-slate-800">{formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * (item.purchasedQuantity ?? item.quantity))}</span>
+                      <span className="font-extrabold text-slate-800">{formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: item.purchasedQuantity ?? item.quantity }).totalIdr)}</span>
                     </div>
                     <p className={`text-[10px] font-bold mt-1 ${item.fulfillmentStatus === 'PURCHASED' ? 'text-emerald-700' : item.fulfillmentStatus === 'PARTIAL' ? 'text-orange-700' : 'text-amber-700'}`}>
                       Status: {item.fulfillmentStatus === 'PURCHASED' ? 'Sudah dibeli' : item.fulfillmentStatus === 'PARTIAL' ? 'Stok sebagian' : 'Pending'}
@@ -328,7 +332,7 @@ export const OrderTrackingView: React.FC = () => {
                         </div>
                         {item.shortageResolution && item.shortageResolution !== 'PENDING' && (
                           <p className="text-[10px] text-emerald-700 font-bold mt-2">
-                            Pilihan: {item.shortageResolution === 'REFUND' ? `Refund ${formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * Math.max(0, (item.orderedQuantity ?? item.quantity) - (item.purchasedQuantity ?? 0)))}` : 'Bagian yang kurang dibatalkan; selisih dikembalikan'}
+                            Pilihan: {item.shortageResolution === 'REFUND' ? `Refund ${formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: Math.max(0, (item.orderedQuantity ?? item.quantity) - (item.purchasedQuantity ?? 0)) }).totalIdr)}` : 'Bagian yang kurang dibatalkan; selisih dikembalikan'}
                           </p>
                         )}
                       </div>
@@ -361,7 +365,7 @@ export const OrderTrackingView: React.FC = () => {
                           return refund ? <p className="text-[10px] text-emerald-700 font-bold mt-1">Status refund: {refund.status}</p> : null;
                         })()}
                       </div>
-                      <span className="text-xs font-black text-rose-700 shrink-0">{formatIDR(calculatePriceBreakdown(item.priceTHB, item.weightGrams).landedSingleItemIdr * getMissingQuantity(item))}</span>
+                      <span className="text-xs font-black text-rose-700 shrink-0">{formatIDR(calculateLinePrice({ priceTHB: item.priceTHB, weightGrams: item.weightGrams, quantity: getMissingQuantity(item) }).totalIdr)}</span>
                     </div>
                   ))}
                 </div>
@@ -389,7 +393,7 @@ export const OrderTrackingView: React.FC = () => {
                 <span className="font-semibold text-slate-800">{formatIDR(activeOrder.jastipFeeIDR)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>Kargo Udara BKK ✈️ JKT:</span>
+                <span>Penyesuaian Kapasitas Bagasi:</span>
                 <span className="font-semibold text-slate-800">{formatIDR(activeOrder.weightFeeIDR)}</span>
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-sm text-slate-900">
@@ -403,10 +407,10 @@ export const OrderTrackingView: React.FC = () => {
           <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-emerald-950">
             <div className="flex items-center space-x-2 mb-2 font-extrabold text-xs text-emerald-900">
               <MessageCircle className="w-4 h-4 text-emerald-600" />
-              <span>Butuh Tambah Barang Saat Live?</span>
+              <span>Mau Tanya Admin?</span>
             </div>
             <p className="text-xs text-emerald-800/90 leading-relaxed mb-4">
-              Shopper kami standby di Bangkok. Hubungi via WhatsApp untuk titipan mendadak saat belanja di toko berlangsung!
+              Hubungi via WhatsApp untuk pertanyaan seputar titipan Bangkok, status pesanan, atau request barang khusus.
             </p>
 
             <a
@@ -415,7 +419,7 @@ export const OrderTrackingView: React.FC = () => {
               rel="noreferrer"
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20 transition-all"
             >
-              <span>Chat WhatsApp Shopper Bangkok</span>
+              <span>Chat WhatsApp Admin Jastipyudin</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>

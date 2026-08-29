@@ -24,6 +24,7 @@ export const CartDrawer: React.FC = () => {
     updateCartQuantity, 
     clearCart,
     calculatePriceBreakdown, 
+    calculateLinePrice,
     formatIDR, 
     formatTHB,
     setIsCheckoutOpen,
@@ -40,11 +41,11 @@ export const CartDrawer: React.FC = () => {
   let totalWeightGrams = 0;
 
   cart.forEach((item) => {
-    const bd = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+    const bd = calculateLinePrice(item);
     totalRawTHB += item.priceTHB * item.quantity;
-    totalRawIDR += bd.baseWithMarkupIdr * item.quantity;
-    totalJastipIDR += bd.jastipFeeIdr * item.quantity;
-    totalWeightFeeIDR += bd.weightFeeIdr * item.quantity;
+    totalRawIDR += bd.totalRawIdr;
+    totalJastipIDR += bd.totalMarkupIdr + bd.totalHandlingIdr;
+    totalWeightFeeIDR += bd.baggageFeeIdr;
     totalWeightGrams += item.weightGrams * item.quantity;
   });
 
@@ -109,7 +110,7 @@ export const CartDrawer: React.FC = () => {
             </div>
           ) : (
             cart.map((item) => {
-              const breakdown = calculatePriceBreakdown(item.priceTHB, item.weightGrams);
+              const breakdown = calculateLinePrice(item);
               return (
                 <div
                   key={item.id}
@@ -207,7 +208,7 @@ export const CartDrawer: React.FC = () => {
                 <span className="font-semibold text-slate-800">{formatIDR(totalJastipIDR)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Estimasi Kargo Udara BKK-JKT (±{totalWeightGrams}g):</span>
+                <span>Penyesuaian Kapasitas Bagasi (±{totalWeightGrams}g):</span>
                 <span className="font-semibold text-slate-800">{formatIDR(totalWeightFeeIDR)}</span>
               </div>
               <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-sm font-extrabold text-slate-900">

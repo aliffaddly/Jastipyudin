@@ -3,8 +3,21 @@ import { BangkokStore, Product, ShoppingTrip, ExchangeConfig, Order, CustomReque
 export const INITIAL_EXCHANGE_CONFIG: ExchangeConfig = {
   thbToIdrRate: 455, // 1 THB = Rp 455
   markupPercent: 12, // 12% standard service markup
-  baseFeePerItemIDR: 20000, // Rp 20.000 jastip fee / item
-  weightRatePer100gIDR: 12000, // Rp 12.000 per 100g (BKK -> JKT Air Cargo + Tax)
+  handlingFeeLowIDR: 10000,
+  handlingFeeMediumIDR: 15000,
+  handlingFeeHighIDR: 20000,
+  lowItemPriceThresholdIDR: 75000,
+  mediumItemPriceThresholdIDR: 300000,
+  baggageFeeTiers: [
+    { minWeightGrams: 0, feeIDR: 0 },
+    { minWeightGrams: 101, feeIDR: 5000 },
+    { minWeightGrams: 251, feeIDR: 15000 },
+    { minWeightGrams: 501, feeIDR: 35000 },
+    { minWeightGrams: 751, feeIDR: 60000 },
+    { minWeightGrams: 1001, feeIDR: 100000 },
+    { minWeightGrams: 1501, feeIDR: 150000 },
+  ],
+  maxAutomaticBaggageGrams: 2000,
 };
 
 export const DEMO_USERS: (User & { password: string })[] = [
@@ -108,6 +121,16 @@ export const BANGKOK_STORES: BangkokStore[] = [
     area: 'All Bangkok Outlets',
     description: 'Convenience store legendaris dengan makanan siap saji hot toastie, snack eksklusif, dan sachet skincare viral.',
     category: '7-Eleven Specials',
+    badgeColor: 'bg-green-600',
+    image: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    id: 'others',
+    name: 'Others (Input nama)',
+    thaiName: '',
+    area: 'All Bangkok Outlets',
+    description: '',
+    category: 'Others',
     badgeColor: 'bg-green-600',
     image: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80',
   },

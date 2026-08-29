@@ -25,3 +25,6 @@ yarn-error.log*
 # TypeScript build info
 *.tsbuildinfo
 next-env.d.ts
+
+supabase/.temp/
+supabase/production-schema.sql
